@@ -15,6 +15,7 @@ if __package__ in (None, ""):
     from iar2sdcc.emitter import emit_stub_library
     from iar2sdcc.linker import parse_undefined_globals
     from iar2sdcc.models import ModuleRecord
+    from iar2sdcc.object_parser import parse_module_summary
     from iar2sdcc.overrides import load_forced_modules
     from iar2sdcc.planning import build_module_candidates, build_module_plan
     from iar2sdcc.report import write_json, write_manifest, write_report
@@ -26,6 +27,7 @@ else:
     from .emitter import emit_stub_library
     from .linker import parse_undefined_globals
     from .models import ModuleRecord
+    from .object_parser import parse_module_summary
     from .overrides import load_forced_modules
     from .planning import build_module_candidates, build_module_plan
     from .report import write_json, write_manifest, write_report
@@ -50,6 +52,10 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_log.add_argument("log", type=Path)
     resolve_log.add_argument("libraries", nargs="+", type=Path)
     resolve_log.add_argument("--json", action="store_true")
+
+    inspect_slice = sub.add_parser("inspect-slice")
+    inspect_slice.add_argument("slice", type=Path)
+    inspect_slice.add_argument("--json", action="store_true")
 
     convert = sub.add_parser("convert")
     convert.add_argument("--manifest", type=Path, required=True)
@@ -243,6 +249,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "convert":
         payload = convert_project(args.manifest, args.out_dir, args.link_log)
         print(json.dumps(payload, indent=2))
+        return 0
+
+    if args.command == "inspect-slice":
+        payload = parse_module_summary(args.slice).to_dict()
+        if args.json:
+            print(json.dumps(payload, indent=2))
+        else:
+            print(f"Module: {payload['module']}")
+            print(f"Path: {payload['path']}")
+            print(f"Size: {payload['size']}")
+            print(f"Calling convention: {payload['calling_convention'] or 'unknown'}")
+            print(f"Code model: {payload['code_model'] or 'unknown'}")
+            print(f"Data model: {payload['data_model'] or 'unknown'}")
+            print(f"Banked markers: {', '.join(payload['banked_markers']) or 'none'}")
+            print(f"Symbols: {len(payload['symbols'])}")
         return 0
 
     if args.command == "resolve-log":

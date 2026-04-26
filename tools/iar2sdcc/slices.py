@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from .archive import extract_module_spans
+from .object_parser import parse_module_summary
+from .report import write_json
 
 
 def _library_dirname(library: str) -> str:
@@ -26,12 +28,15 @@ def export_module_slices(
             if span is None:
                 continue
             artifact = library_dir / f"{module}.bin"
+            summary_path = artifact.with_suffix(".json")
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_bytes(data[span.start_offset:span.end_offset])
+            write_json(summary_path, parse_module_summary(artifact).to_dict())
             entries.append(
                 {
                     "module": module,
                     "path": str(artifact),
+                    "summary_path": str(summary_path),
                     "start_offset": span.start_offset,
                     "end_offset": span.end_offset,
                     "size": span.size,
