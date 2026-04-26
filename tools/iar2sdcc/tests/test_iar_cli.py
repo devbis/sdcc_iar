@@ -79,6 +79,13 @@ class ConvertCliTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             payload = json.loads((Path(td) / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(payload["link_resolution"]["log"], str(log_path.resolve()))
+            module_plan_file = Path(td) / "module-plan.json"
+            self.assertTrue(module_plan_file.exists())
+            plan_payload = json.loads(module_plan_file.read_text(encoding="utf-8"))
+            self.assertEqual(
+                plan_payload["project"],
+                "samplelight-cc2530db-coordinator",
+            )
             self.assertEqual(
                 payload["link_resolution"]["libraries"]["_HalAesInit"],
                 [
@@ -165,6 +172,10 @@ class ConvertCliTest(unittest.TestCase):
             self.assertEqual(
                 payload["link_resolution"]["module_plan"][router_lib][0]["module"],
                 "APSMEDE",
+            )
+            self.assertEqual(
+                plan_payload["module_plan"],
+                payload["link_resolution"]["module_plan"],
             )
             report = (Path(td) / "report.txt").read_text(encoding="utf-8")
             self.assertIn("link_undefined_symbols=3", report)

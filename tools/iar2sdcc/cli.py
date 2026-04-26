@@ -17,7 +17,7 @@ if __package__ in (None, ""):
     from iar2sdcc.models import ModuleRecord
     from iar2sdcc.overrides import load_forced_modules
     from iar2sdcc.planning import build_module_candidates, build_module_plan
-    from iar2sdcc.report import write_manifest, write_report
+    from iar2sdcc.report import write_json, write_manifest, write_report
     from iar2sdcc.selector import select_modules
     from iar2sdcc.workspace import ensure_out_dir
 else:
@@ -27,7 +27,7 @@ else:
     from .models import ModuleRecord
     from .overrides import load_forced_modules
     from .planning import build_module_candidates, build_module_plan
-    from .report import write_manifest, write_report
+    from .report import write_json, write_manifest, write_report
     from .selector import select_modules
     from .workspace import ensure_out_dir
 
@@ -186,6 +186,16 @@ def convert_project(
         workspace / "report.txt",
         report_lines,
     )
+    if link_resolution is not None:
+        write_json(
+            workspace / "module-plan.json",
+            {
+                "project": project,
+                "log": link_resolution["log"],
+                "module_plan": link_resolution["module_plan"],
+                "summary": link_resolution_summary,
+            },
+        )
 
     payload = {
         "project": project,
