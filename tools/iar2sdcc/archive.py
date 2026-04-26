@@ -2,9 +2,24 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import re
 
 
 BANKED_MARKERS = ("?BDISPATCH", "?BRET", "?BANKED_ENTER_XDATA", "?BANKED_LEAVE_XDATA")
+SYMBOL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+NOISE_SYMBOLS = {
+    "CLib",
+    "Status_t",
+    "ZStatus_t",
+    "bool",
+    "uint8",
+    "uint16",
+    "uint32",
+    "data",
+    "disabled",
+    "large",
+    "plain",
+}
 
 
 def extract_strings(data: bytes, min_len: int = 4) -> list[str]:
@@ -28,19 +43,53 @@ class ArchiveInventory:
     size: int
     strings: list[str]
     banked_markers: list[str]
+    symbols: list[str]
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+def normalize_symbol(token: str) -> str:
+    if token.startswith(("_", "?")):
+        return token
+    return f"_{token}"
+
+
+def is_candidate_symbol(token: str) -> bool:
+    if token in NOISE_SYMBOLS:
+        return False
+    if token.startswith("__"):
+        return False
+    if token.startswith("?"):
+        return False
+    if not SYMBOL_RE.match(token):
+        return False
+    return "_" in token or any(ch.islower() for ch in token) and any(ch.isupper() for ch in token)
+
+
+def extract_symbols(strings: list[str]) -> list[str]:
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for token in strings:
+        if not is_candidate_symbol(token):
+            continue
+        normalized = normalize_symbol(token)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        symbols.append(normalized)
+    return symbols
 
 
 def scan_library(path: Path) -> ArchiveInventory:
     data = path.read_bytes()
     strings = extract_strings(data)
     markers = [marker for marker in BANKED_MARKERS if marker in strings]
+    symbols = extract_symbols(strings)
     return ArchiveInventory(
         library=str(path.resolve()),
         size=len(data),
         strings=strings[:256],
         banked_markers=markers,
+        symbols=symbols,
     )
-

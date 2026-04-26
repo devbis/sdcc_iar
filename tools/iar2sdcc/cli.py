@@ -11,7 +11,7 @@ if __package__ in (None, ""):
     if str(PACKAGE_ROOT) not in sys.path:
         sys.path.insert(0, str(PACKAGE_ROOT))
 
-    from iar2sdcc.archive import scan_library
+    from iar2sdcc.archive import normalize_symbol, scan_library
     from iar2sdcc.emitter import emit_stub_library
     from iar2sdcc.models import ModuleRecord
     from iar2sdcc.overrides import load_forced_modules
@@ -19,7 +19,7 @@ if __package__ in (None, ""):
     from iar2sdcc.selector import select_modules
     from iar2sdcc.workspace import ensure_out_dir
 else:
-    from .archive import scan_library
+    from .archive import normalize_symbol, scan_library
     from .emitter import emit_stub_library
     from .models import ModuleRecord
     from .overrides import load_forced_modules
@@ -36,6 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("library", type=Path)
     scan.add_argument("--json", action="store_true")
 
+    resolve = sub.add_parser("resolve")
+    resolve.add_argument("items", nargs="+")
+    resolve.add_argument("--json", action="store_true")
+
     convert = sub.add_parser("convert")
     convert.add_argument("--manifest", type=Path, required=True)
     convert.add_argument("--out-dir", type=Path, required=True)
@@ -48,6 +52,30 @@ def default_override_path(manifest_path: Path) -> Path:
 
 def load_project_manifest(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def split_resolve_items(items: list[str]) -> tuple[list[Path], list[str]]:
+    libraries: list[Path] = []
+    symbols: list[str] = []
+    for item in items:
+        path = Path(item)
+        if path.exists():
+            libraries.append(path)
+        else:
+            symbols.append(normalize_symbol(item))
+    return libraries, symbols
+
+
+def resolve_symbols(libraries: list[Path], symbols: list[str]) -> dict[str, list[str]]:
+    inventories = [scan_library(path) for path in libraries]
+    resolved: dict[str, list[str]] = {}
+    for symbol in symbols:
+        resolved[symbol] = [
+            inventory.library
+            for inventory in inventories
+            if symbol in inventory.symbols
+        ]
+    return resolved
 
 
 def convert_project(manifest_path: Path, out_dir: Path) -> dict[str, object]:
@@ -101,6 +129,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Library: {payload['library']}")
             print(f"Size: {payload['size']}")
             print(f"Banked markers: {', '.join(payload['banked_markers']) or 'none'}")
+            print(f"Symbols: {len(payload['symbols'])}")
+        return 0
+
+    if args.command == "resolve":
+        libraries, symbols = split_resolve_items(args.items)
+        payload = resolve_symbols(libraries, symbols)
+        if args.json:
+            print(json.dumps(payload, indent=2))
+        else:
+            for symbol, matches in payload.items():
+                print(f"{symbol}: {', '.join(matches) if matches else 'unresolved'}")
         return 0
 
     if args.command == "convert":
