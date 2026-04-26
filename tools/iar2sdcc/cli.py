@@ -50,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     convert = sub.add_parser("convert")
     convert.add_argument("--manifest", type=Path, required=True)
     convert.add_argument("--out-dir", type=Path, required=True)
+    convert.add_argument("--link-log", type=Path)
     return parser
 
 
@@ -96,7 +97,20 @@ def resolve_log(log_path: Path, libraries: list[Path]) -> dict[str, object]:
     }
 
 
-def convert_project(manifest_path: Path, out_dir: Path) -> dict[str, object]:
+def summarize_link_resolution(link_resolution: dict[str, object]) -> dict[str, int]:
+    libraries = link_resolution["libraries"]
+    return {
+        "undefined_symbols": len(link_resolution["undefined_symbols"]),
+        "symbols_with_owner": sum(1 for matches in libraries.values() if matches),
+        "symbols_without_owner": sum(1 for matches in libraries.values() if not matches),
+    }
+
+
+def convert_project(
+    manifest_path: Path,
+    out_dir: Path,
+    link_log_path: Path | None = None,
+) -> dict[str, object]:
     project = manifest_path.stem
     manifest = load_project_manifest(manifest_path)
     libraries = [str(Path(lib)) for lib in manifest.get("iar_libraries", [])]
@@ -108,6 +122,11 @@ def convert_project(manifest_path: Path, out_dir: Path) -> dict[str, object]:
     workspace = ensure_out_dir(out_dir)
     emitted = [emit_stub_library(workspace, module.name) for module in selected]
     unresolved = sorted(str(symbol) for symbol in manifest.get("required_symbols", []))
+    link_resolution = None
+    link_resolution_summary = None
+    if link_log_path is not None:
+        link_resolution = resolve_log(link_log_path, [Path(library) for library in libraries])
+        link_resolution_summary = summarize_link_resolution(link_resolution)
 
     write_manifest(
         workspace / "manifest.json",
@@ -116,25 +135,40 @@ def convert_project(manifest_path: Path, out_dir: Path) -> dict[str, object]:
         modules=selected,
         emitted=emitted,
         unresolved=unresolved,
+        link_resolution=link_resolution,
     )
+    report_lines = [
+        "conversion staged",
+        f"project={project}",
+        f"libraries={len(libraries)}",
+        f"selected_modules={len(selected)}",
+        f"emitted_artifacts={len(emitted)}",
+    ]
+    if link_resolution_summary is not None:
+        report_lines.extend(
+            [
+                f"link_log={link_resolution['log']}",
+                f"link_undefined_symbols={link_resolution_summary['undefined_symbols']}",
+                f"link_symbols_with_owner={link_resolution_summary['symbols_with_owner']}",
+                f"link_symbols_without_owner={link_resolution_summary['symbols_without_owner']}",
+            ]
+        )
     write_report(
         workspace / "report.txt",
-        [
-            "conversion staged",
-            f"project={project}",
-            f"libraries={len(libraries)}",
-            f"selected_modules={len(selected)}",
-            f"emitted_artifacts={len(emitted)}",
-        ],
+        report_lines,
     )
 
-    return {
+    payload = {
         "project": project,
         "libraries": libraries,
         "selected_modules": [module.name for module in selected],
         "emitted_artifacts": emitted,
         "unresolved_symbols": unresolved,
     }
+    if link_resolution is not None:
+        payload["link_resolution"] = link_resolution
+        payload["link_resolution_summary"] = link_resolution_summary
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -161,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "convert":
-        payload = convert_project(args.manifest, args.out_dir)
+        payload = convert_project(args.manifest, args.out_dir, args.link_log)
         print(json.dumps(payload, indent=2))
         return 0
 
