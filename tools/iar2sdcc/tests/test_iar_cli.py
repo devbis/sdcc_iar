@@ -22,6 +22,7 @@ class IarCliSmokeTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertIn("usage:", proc.stdout.lower())
         self.assertIn("scan", proc.stdout)
+        self.assertIn("resolve-log", proc.stdout)
         self.assertIn("convert", proc.stdout)
 
 

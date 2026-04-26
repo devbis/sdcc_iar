@@ -13,6 +13,7 @@ if __package__ in (None, ""):
 
     from iar2sdcc.archive import normalize_symbol, scan_library
     from iar2sdcc.emitter import emit_stub_library
+    from iar2sdcc.linker import parse_undefined_globals
     from iar2sdcc.models import ModuleRecord
     from iar2sdcc.overrides import load_forced_modules
     from iar2sdcc.report import write_manifest, write_report
@@ -21,6 +22,7 @@ if __package__ in (None, ""):
 else:
     from .archive import normalize_symbol, scan_library
     from .emitter import emit_stub_library
+    from .linker import parse_undefined_globals
     from .models import ModuleRecord
     from .overrides import load_forced_modules
     from .report import write_manifest, write_report
@@ -39,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
     resolve = sub.add_parser("resolve")
     resolve.add_argument("items", nargs="+")
     resolve.add_argument("--json", action="store_true")
+
+    resolve_log = sub.add_parser("resolve-log")
+    resolve_log.add_argument("log", type=Path)
+    resolve_log.add_argument("libraries", nargs="+", type=Path)
+    resolve_log.add_argument("--json", action="store_true")
 
     convert = sub.add_parser("convert")
     convert.add_argument("--manifest", type=Path, required=True)
@@ -76,6 +83,17 @@ def resolve_symbols(libraries: list[Path], symbols: list[str]) -> dict[str, list
             if symbol in inventory.symbols
         ]
     return resolved
+
+
+def resolve_log(log_path: Path, libraries: list[Path]) -> dict[str, object]:
+    references = parse_undefined_globals(log_path.read_text(encoding="utf-8"))
+    symbols = list(references)
+    return {
+        "log": str(log_path.resolve()),
+        "undefined_symbols": symbols,
+        "references": references,
+        "libraries": resolve_symbols(libraries, symbols),
+    }
 
 
 def convert_project(manifest_path: Path, out_dir: Path) -> dict[str, object]:
@@ -145,6 +163,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "convert":
         payload = convert_project(args.manifest, args.out_dir)
         print(json.dumps(payload, indent=2))
+        return 0
+
+    if args.command == "resolve-log":
+        payload = resolve_log(args.log, args.libraries)
+        if args.json:
+            print(json.dumps(payload, indent=2))
+        else:
+            for symbol in payload["undefined_symbols"]:
+                modules = ", ".join(payload["references"][symbol])
+                libraries = payload["libraries"][symbol]
+                matches = ", ".join(libraries) if libraries else "unresolved"
+                print(f"{symbol}: modules={modules}; libraries={matches}")
         return 0
 
     return 1

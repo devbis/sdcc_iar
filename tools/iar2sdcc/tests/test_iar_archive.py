@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -62,3 +63,54 @@ class IarArchiveScanTest(unittest.TestCase):
             payload["_MAC_CbackEvent"],
             [str(TIMAC_LIB.resolve())],
         )
+
+    def test_resolve_log_maps_undefined_symbols_to_libraries(self) -> None:
+        log_text = """\
+?ASlink-Warning-Undefined Global _NLME_GetExtAddr referenced by module zcl_samplelight
+?ASlink-Warning-Undefined Global _HalAesInit referenced by module zmain
+?ASlink-Warning-Undefined Global _MAC_CbackEvent referenced by module mac_task
+?ASlink-Warning-Undefined Global _HalAesInit referenced by module zsec_mgr
+?ASlink-Error-Insufficient ROM/EPROM/FLASH memory.
+"""
+        with tempfile.TemporaryDirectory() as td:
+            log_path = Path(td) / "samplelight.link.log"
+            log_path.write_text(log_text, encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "iar2sdcc.cli",
+                    "resolve-log",
+                    "--json",
+                    str(log_path),
+                    str(LIB),
+                    str(SECURITY_LIB),
+                    str(TIMAC_LIB),
+                ],
+                cwd=TOOLS,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            payload = json.loads(proc.stdout)
+            self.assertEqual(payload["log"], str(log_path.resolve()))
+            self.assertEqual(
+                payload["undefined_symbols"],
+                ["_HalAesInit", "_MAC_CbackEvent", "_NLME_GetExtAddr"],
+            )
+            self.assertEqual(
+                payload["references"]["_HalAesInit"],
+                ["zmain", "zsec_mgr"],
+            )
+            self.assertEqual(
+                payload["libraries"]["_NLME_GetExtAddr"],
+                [str(LIB.resolve())],
+            )
+            self.assertEqual(
+                payload["libraries"]["_HalAesInit"],
+                [str(SECURITY_LIB.resolve())],
+            )
+            self.assertEqual(
+                payload["libraries"]["_MAC_CbackEvent"],
+                [str(TIMAC_LIB.resolve())],
+            )
