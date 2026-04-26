@@ -7,6 +7,7 @@ import re
 
 BANKED_MARKERS = ("?BDISPATCH", "?BRET", "?BANKED_ENTER_XDATA", "?BANKED_LEAVE_XDATA")
 SYMBOL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+MODULE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 NOISE_SYMBOLS = {
     "CLib",
     "Status_t",
@@ -44,6 +45,7 @@ class ArchiveInventory:
     strings: list[str]
     banked_markers: list[str]
     symbols: list[str]
+    modules: list[str]
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -81,15 +83,37 @@ def extract_symbols(strings: list[str]) -> list[str]:
     return symbols
 
 
+def extract_modules(strings: list[str]) -> list[str]:
+    modules: list[str] = []
+    seen: set[str] = set()
+    for index in range(len(strings) - 3):
+        candidate = strings[index]
+        if strings[index + 1] != "10.20":
+            continue
+        if strings[index + 2] != "__SystemLibrary":
+            continue
+        if strings[index + 3] != "CLib":
+            continue
+        if not MODULE_NAME_RE.match(candidate):
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        modules.append(candidate)
+    return modules
+
+
 def scan_library(path: Path) -> ArchiveInventory:
     data = path.read_bytes()
     strings = extract_strings(data)
     markers = [marker for marker in BANKED_MARKERS if marker in strings]
     symbols = extract_symbols(strings)
+    modules = extract_modules(strings)
     return ArchiveInventory(
         library=str(path.resolve()),
         size=len(data),
         strings=strings[:256],
         banked_markers=markers,
         symbols=symbols,
+        modules=modules,
     )

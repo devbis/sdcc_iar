@@ -28,7 +28,10 @@ class IarArchiveScanTest(unittest.TestCase):
         self.assertIn("strings", payload)
         self.assertIn("banked_markers", payload)
         self.assertIn("symbols", payload)
+        self.assertIn("modules", payload)
         self.assertIn("_NLME_GetExtAddr", payload["symbols"])
+        self.assertIn("AddrMgr", payload["modules"])
+        self.assertIn("aps_groups", payload["modules"])
 
     def test_resolve_matches_symbols_to_libraries(self) -> None:
         proc = subprocess.run(

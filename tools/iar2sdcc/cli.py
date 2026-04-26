@@ -16,6 +16,7 @@ if __package__ in (None, ""):
     from iar2sdcc.linker import parse_undefined_globals
     from iar2sdcc.models import ModuleRecord
     from iar2sdcc.overrides import load_forced_modules
+    from iar2sdcc.planning import build_module_candidates
     from iar2sdcc.report import write_manifest, write_report
     from iar2sdcc.selector import select_modules
     from iar2sdcc.workspace import ensure_out_dir
@@ -25,6 +26,7 @@ else:
     from .linker import parse_undefined_globals
     from .models import ModuleRecord
     from .overrides import load_forced_modules
+    from .planning import build_module_candidates
     from .report import write_manifest, write_report
     from .selector import select_modules
     from .workspace import ensure_out_dir
@@ -89,20 +91,41 @@ def resolve_symbols(libraries: list[Path], symbols: list[str]) -> dict[str, list
 def resolve_log(log_path: Path, libraries: list[Path]) -> dict[str, object]:
     references = parse_undefined_globals(log_path.read_text(encoding="utf-8"))
     symbols = list(references)
+    inventories = [scan_library(path) for path in libraries]
+    library_modules = {
+        inventory.library: inventory.modules
+        for inventory in inventories
+    }
+    resolved_symbols = {
+        symbol: [
+            inventory.library
+            for inventory in inventories
+            if symbol in inventory.symbols
+        ]
+        for symbol in symbols
+    }
     return {
         "log": str(log_path.resolve()),
         "undefined_symbols": symbols,
         "references": references,
-        "libraries": resolve_symbols(libraries, symbols),
+        "libraries": resolved_symbols,
+        "library_modules": library_modules,
+        "module_candidates": build_module_candidates(library_modules, resolved_symbols),
     }
 
 
 def summarize_link_resolution(link_resolution: dict[str, object]) -> dict[str, int]:
     libraries = link_resolution["libraries"]
+    module_candidates = link_resolution["module_candidates"]
     return {
         "undefined_symbols": len(link_resolution["undefined_symbols"]),
         "symbols_with_owner": sum(1 for matches in libraries.values() if matches),
         "symbols_without_owner": sum(1 for matches in libraries.values() if not matches),
+        "symbols_with_module_candidates": sum(
+            1
+            for symbol_candidates in module_candidates.values()
+            if any(candidates for candidates in symbol_candidates.values())
+        ),
     }
 
 
@@ -151,6 +174,7 @@ def convert_project(
                 f"link_undefined_symbols={link_resolution_summary['undefined_symbols']}",
                 f"link_symbols_with_owner={link_resolution_summary['symbols_with_owner']}",
                 f"link_symbols_without_owner={link_resolution_summary['symbols_without_owner']}",
+                f"link_symbols_with_module_candidates={link_resolution_summary['symbols_with_module_candidates']}",
             ]
         )
     write_report(

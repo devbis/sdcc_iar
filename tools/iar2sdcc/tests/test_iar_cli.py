@@ -96,6 +96,41 @@ class ConvertCliTest(unittest.TestCase):
                     )
                 ],
             )
+            self.assertIn(
+                "APSMEDE",
+                payload["link_resolution"]["module_candidates"]["_APSME_GetRequest"][
+                    str(
+                        (
+                            WORKSPACE
+                            / "Z-Stack_3.0.2"
+                            / "Projects"
+                            / "zstack"
+                            / "Libraries"
+                            / "TI2530DB"
+                            / "bin"
+                            / "Router-Pro.lib"
+                        ).resolve()
+                    )
+                ],
+            )
+            self.assertIn(
+                "hal_aes",
+                payload["link_resolution"]["module_candidates"]["_HalAesInit"][
+                    str(
+                        (
+                            WORKSPACE
+                            / "Z-Stack_3.0.2"
+                            / "Projects"
+                            / "zstack"
+                            / "Libraries"
+                            / "TI2530DB"
+                            / "bin"
+                            / "Security.lib"
+                        ).resolve()
+                    )
+                ],
+            )
             report = (Path(td) / "report.txt").read_text(encoding="utf-8")
             self.assertIn("link_undefined_symbols=3", report)
             self.assertIn("link_symbols_without_owner=0", report)
+            self.assertIn("link_symbols_with_module_candidates=3", report)
