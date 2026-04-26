@@ -82,6 +82,8 @@ class ConvertCliTest(unittest.TestCase):
             module_plan_file = Path(td) / "module-plan.json"
             self.assertTrue(module_plan_file.exists())
             plan_payload = json.loads(module_plan_file.read_text(encoding="utf-8"))
+            module_slice_file = Path(td) / "module-slices" / "Security" / "hal_aes.bin"
+            self.assertTrue(module_slice_file.exists())
             self.assertEqual(
                 plan_payload["project"],
                 "samplelight-cc2530db-coordinator",
@@ -177,8 +179,15 @@ class ConvertCliTest(unittest.TestCase):
                 plan_payload["module_plan"],
                 payload["link_resolution"]["module_plan"],
             )
+            self.assertTrue(
+                any(
+                    entry["module"] == "hal_aes"
+                    for entry in plan_payload["module_slices"][security_lib]
+                )
+            )
             report = (Path(td) / "report.txt").read_text(encoding="utf-8")
             self.assertIn("link_undefined_symbols=3", report)
             self.assertIn("link_symbols_without_owner=0", report)
             self.assertIn("link_symbols_with_module_candidates=3", report)
             self.assertIn("link_planned_modules=3", report)
+            self.assertIn("link_exported_module_slices=3", report)

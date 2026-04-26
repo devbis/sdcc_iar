@@ -19,6 +19,7 @@ if __package__ in (None, ""):
     from iar2sdcc.planning import build_module_candidates, build_module_plan
     from iar2sdcc.report import write_json, write_manifest, write_report
     from iar2sdcc.selector import select_modules
+    from iar2sdcc.slices import export_module_slices
     from iar2sdcc.workspace import ensure_out_dir
 else:
     from .archive import normalize_symbol, scan_library
@@ -29,6 +30,7 @@ else:
     from .planning import build_module_candidates, build_module_plan
     from .report import write_json, write_manifest, write_report
     from .selector import select_modules
+    from .slices import export_module_slices
     from .workspace import ensure_out_dir
 
 
@@ -120,6 +122,7 @@ def summarize_link_resolution(link_resolution: dict[str, object]) -> dict[str, i
     libraries = link_resolution["libraries"]
     module_candidates = link_resolution["module_candidates"]
     module_plan = link_resolution["module_plan"]
+    module_slices = link_resolution.get("module_slices", {})
     return {
         "undefined_symbols": len(link_resolution["undefined_symbols"]),
         "symbols_with_owner": sum(1 for matches in libraries.values() if matches),
@@ -130,6 +133,7 @@ def summarize_link_resolution(link_resolution: dict[str, object]) -> dict[str, i
             if any(candidates for candidates in symbol_candidates.values())
         ),
         "planned_modules": sum(len(records) for records in module_plan.values()),
+        "exported_module_slices": sum(len(records) for records in module_slices.values()),
     }
 
 
@@ -153,6 +157,7 @@ def convert_project(
     link_resolution_summary = None
     if link_log_path is not None:
         link_resolution = resolve_log(link_log_path, [Path(library) for library in libraries])
+        link_resolution["module_slices"] = export_module_slices(workspace, link_resolution["module_plan"])
         link_resolution_summary = summarize_link_resolution(link_resolution)
 
     write_manifest(
@@ -180,6 +185,7 @@ def convert_project(
                 f"link_symbols_without_owner={link_resolution_summary['symbols_without_owner']}",
                 f"link_symbols_with_module_candidates={link_resolution_summary['symbols_with_module_candidates']}",
                 f"link_planned_modules={link_resolution_summary['planned_modules']}",
+                f"link_exported_module_slices={link_resolution_summary['exported_module_slices']}",
             ]
         )
     write_report(
@@ -193,6 +199,7 @@ def convert_project(
                 "project": project,
                 "log": link_resolution["log"],
                 "module_plan": link_resolution["module_plan"],
+                "module_slices": link_resolution["module_slices"],
                 "summary": link_resolution_summary,
             },
         )

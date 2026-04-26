@@ -51,6 +51,25 @@ class ArchiveInventory:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class ModuleSpan:
+    name: str
+    start_offset: int
+    end_offset: int
+
+    @property
+    def size(self) -> int:
+        return self.end_offset - self.start_offset
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "start_offset": self.start_offset,
+            "end_offset": self.end_offset,
+            "size": self.size,
+        }
+
+
 def normalize_symbol(token: str) -> str:
     if token.startswith(("_", "?")):
         return token
@@ -101,6 +120,52 @@ def extract_modules(strings: list[str]) -> list[str]:
         seen.add(candidate)
         modules.append(candidate)
     return modules
+
+
+def extract_strings_with_offsets(data: bytes, min_len: int = 4) -> list[tuple[int, str]]:
+    strings: list[tuple[int, str]] = []
+    chunk = bytearray()
+    start: int | None = None
+    for index, byte in enumerate(data):
+        if 32 <= byte <= 126:
+            if start is None:
+                start = index
+            chunk.append(byte)
+            continue
+        if len(chunk) >= min_len and start is not None:
+            strings.append((start, chunk.decode("ascii", errors="ignore")))
+        chunk.clear()
+        start = None
+    if len(chunk) >= min_len and start is not None:
+        strings.append((start, chunk.decode("ascii", errors="ignore")))
+    return strings
+
+
+def extract_module_spans(data: bytes) -> list[ModuleSpan]:
+    strings = extract_strings_with_offsets(data)
+    starts: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for index in range(len(strings) - 3):
+        offset, candidate = strings[index]
+        if strings[index + 1][1] != "10.20":
+            continue
+        if strings[index + 2][1] != "__SystemLibrary":
+            continue
+        if strings[index + 3][1] != "CLib":
+            continue
+        if not MODULE_NAME_RE.match(candidate):
+            continue
+        key = (candidate, offset)
+        if key in seen:
+            continue
+        seen.add(key)
+        starts.append((candidate, offset))
+
+    spans: list[ModuleSpan] = []
+    for index, (name, start_offset) in enumerate(starts):
+        end_offset = starts[index + 1][1] if index + 1 < len(starts) else len(data)
+        spans.append(ModuleSpan(name=name, start_offset=start_offset, end_offset=end_offset))
+    return spans
 
 
 def scan_library(path: Path) -> ArchiveInventory:
