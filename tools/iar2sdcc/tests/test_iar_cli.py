@@ -248,3 +248,8 @@ class ConvertCliTest(unittest.TestCase):
             self.assertIn("_HalAesInit", payload["exports"])
             self.assertIn("_osal_memcpy", payload["imports"])
             self.assertIn("_Jf1g", payload["noise_symbols"])
+            self.assertIn("_HalAesInit", payload["normalized_ir"]["public_exports"])
+            self.assertIn("_SSP_CCM_Encrypt", payload["normalized_ir"]["public_exports"])
+            self.assertIn("_AesLoadIV", payload["normalized_ir"]["internal_exports"])
+            self.assertIn("_sspAesEncryptHW", payload["normalized_ir"]["internal_exports"])
+            self.assertIn("_osal_memcpy", payload["normalized_ir"]["required_imports"])

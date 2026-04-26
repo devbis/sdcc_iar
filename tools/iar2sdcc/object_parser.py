@@ -22,6 +22,26 @@ IMPORT_SYMBOLS = {
     "_halAssertHandler",
 }
 NOISE_RE = re.compile(r"^_(?:J|Z|ZZ|nJ)[A-Za-z0-9_]*$")
+PUBLIC_EXPORT_PREFIXES = (
+    "Hal",
+    "SSP",
+    "MAC",
+    "MT",
+    "APS",
+    "APSDE",
+    "APSME",
+    "APSF",
+    "NLME",
+    "NLDE",
+    "AddrMgr",
+    "Assoc",
+    "GP",
+    "RTG",
+    "Nwk",
+    "NWK",
+    "ZDO",
+    "ZD",
+)
 
 
 def parse_module_names(path: Path) -> list[str]:
@@ -51,6 +71,7 @@ class ModuleSummary:
     imports: list[str]
     noise_symbols: list[str]
     unknown_symbols: list[str]
+    normalized_ir: dict[str, object]
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -116,11 +137,51 @@ def classify_symbols(
     return exports, imports, noise_symbols, unknown_symbols
 
 
+def classify_export_visibility(exports: list[str]) -> tuple[list[str], list[str]]:
+    public_exports: list[str] = []
+    internal_exports: list[str] = []
+    for symbol in exports:
+        name = symbol.lstrip("_")
+        if name.startswith("p") and len(name) > 1 and name[1:2].isupper():
+            internal_exports.append(symbol)
+            continue
+        if name.endswith("_t"):
+            internal_exports.append(symbol)
+            continue
+        if any(name.startswith(prefix) for prefix in PUBLIC_EXPORT_PREFIXES):
+            public_exports.append(symbol)
+            continue
+        internal_exports.append(symbol)
+    return public_exports, internal_exports
+
+
+def build_normalized_ir(
+    module: str,
+    calling_convention: str | None,
+    code_model: str | None,
+    data_model: str | None,
+    exports: list[str],
+    imports: list[str],
+) -> dict[str, object]:
+    public_exports, internal_exports = classify_export_visibility(exports)
+    return {
+        "module": module,
+        "calling_convention": calling_convention,
+        "code_model": code_model,
+        "data_model": data_model,
+        "public_exports": public_exports,
+        "internal_exports": internal_exports,
+        "required_imports": imports,
+    }
+
+
 def parse_module_summary(path: Path) -> ModuleSummary:
     data = path.read_bytes()
     strings = extract_strings(data)
     module = strings[0] if strings else path.stem
     calling_convention = _next_value(strings, "__calling_convention")
+    code_model = _next_value(strings, "__code_model")
+    data_model = _next_value(strings, "__data_model")
     symbols = extract_symbols(strings)
     exports, imports, noise_symbols, unknown_symbols = classify_symbols(
         module,
@@ -132,12 +193,20 @@ def parse_module_summary(path: Path) -> ModuleSummary:
         path=str(path.resolve()),
         size=len(data),
         calling_convention=calling_convention,
-        code_model=_next_value(strings, "__code_model"),
-        data_model=_next_value(strings, "__data_model"),
+        code_model=code_model,
+        data_model=data_model,
         banked_markers=[marker for marker in BANKED_MARKERS if marker in strings],
         symbols=symbols,
         exports=exports,
         imports=imports,
         noise_symbols=noise_symbols,
         unknown_symbols=unknown_symbols,
+        normalized_ir=build_normalized_ir(
+            module,
+            calling_convention,
+            code_model,
+            data_model,
+            exports,
+            imports,
+        ),
     )
