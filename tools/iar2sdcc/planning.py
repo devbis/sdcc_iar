@@ -97,3 +97,31 @@ def build_module_candidates(
             )
         candidates[symbol] = symbol_candidates
     return candidates
+
+
+def build_module_plan(
+    module_candidates: dict[str, dict[str, list[str]]],
+) -> dict[str, list[dict[str, object]]]:
+    grouped: dict[str, dict[str, list[str]]] = {}
+    for symbol, library_candidates in module_candidates.items():
+        for library, candidates in library_candidates.items():
+            if not candidates:
+                continue
+            module = candidates[0]
+            library_plan = grouped.setdefault(library, {})
+            symbols = library_plan.setdefault(module, [])
+            symbols.append(symbol)
+
+    plan: dict[str, list[dict[str, object]]] = {}
+    for library, modules in grouped.items():
+        records = [
+            {
+                "module": module,
+                "symbol_count": len(sorted(symbols)),
+                "symbols": sorted(symbols),
+            }
+            for module, symbols in modules.items()
+        ]
+        records.sort(key=lambda record: (-record["symbol_count"], record["module"]))
+        plan[library] = records
+    return plan

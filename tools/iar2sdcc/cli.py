@@ -16,7 +16,7 @@ if __package__ in (None, ""):
     from iar2sdcc.linker import parse_undefined_globals
     from iar2sdcc.models import ModuleRecord
     from iar2sdcc.overrides import load_forced_modules
-    from iar2sdcc.planning import build_module_candidates
+    from iar2sdcc.planning import build_module_candidates, build_module_plan
     from iar2sdcc.report import write_manifest, write_report
     from iar2sdcc.selector import select_modules
     from iar2sdcc.workspace import ensure_out_dir
@@ -26,7 +26,7 @@ else:
     from .linker import parse_undefined_globals
     from .models import ModuleRecord
     from .overrides import load_forced_modules
-    from .planning import build_module_candidates
+    from .planning import build_module_candidates, build_module_plan
     from .report import write_manifest, write_report
     from .selector import select_modules
     from .workspace import ensure_out_dir
@@ -104,19 +104,22 @@ def resolve_log(log_path: Path, libraries: list[Path]) -> dict[str, object]:
         ]
         for symbol in symbols
     }
+    module_candidates = build_module_candidates(library_modules, resolved_symbols)
     return {
         "log": str(log_path.resolve()),
         "undefined_symbols": symbols,
         "references": references,
         "libraries": resolved_symbols,
         "library_modules": library_modules,
-        "module_candidates": build_module_candidates(library_modules, resolved_symbols),
+        "module_candidates": module_candidates,
+        "module_plan": build_module_plan(module_candidates),
     }
 
 
 def summarize_link_resolution(link_resolution: dict[str, object]) -> dict[str, int]:
     libraries = link_resolution["libraries"]
     module_candidates = link_resolution["module_candidates"]
+    module_plan = link_resolution["module_plan"]
     return {
         "undefined_symbols": len(link_resolution["undefined_symbols"]),
         "symbols_with_owner": sum(1 for matches in libraries.values() if matches),
@@ -126,6 +129,7 @@ def summarize_link_resolution(link_resolution: dict[str, object]) -> dict[str, i
             for symbol_candidates in module_candidates.values()
             if any(candidates for candidates in symbol_candidates.values())
         ),
+        "planned_modules": sum(len(records) for records in module_plan.values()),
     }
 
 
@@ -175,6 +179,7 @@ def convert_project(
                 f"link_symbols_with_owner={link_resolution_summary['symbols_with_owner']}",
                 f"link_symbols_without_owner={link_resolution_summary['symbols_without_owner']}",
                 f"link_symbols_with_module_candidates={link_resolution_summary['symbols_with_module_candidates']}",
+                f"link_planned_modules={link_resolution_summary['planned_modules']}",
             ]
         )
     write_report(
