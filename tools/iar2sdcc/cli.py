@@ -12,7 +12,12 @@ if __package__ in (None, ""):
         sys.path.insert(0, str(PACKAGE_ROOT))
 
     from iar2sdcc.archive import normalize_symbol, scan_library
-    from iar2sdcc.emitter import emit_stub_library
+    from iar2sdcc.emitter import (
+        emit_auto_stub_module,
+        emit_fallback_stub,
+        emit_ownerless_stub,
+        emit_stub_library,
+    )
     from iar2sdcc.linker import parse_undefined_globals
     from iar2sdcc.models import ModuleRecord
     from iar2sdcc.object_parser import parse_module_summary
@@ -24,7 +29,12 @@ if __package__ in (None, ""):
     from iar2sdcc.workspace import ensure_out_dir
 else:
     from .archive import normalize_symbol, scan_library
-    from .emitter import emit_stub_library
+    from .emitter import (
+        emit_auto_stub_module,
+        emit_fallback_stub,
+        emit_ownerless_stub,
+        emit_stub_library,
+    )
     from .linker import parse_undefined_globals
     from .models import ModuleRecord
     from .object_parser import parse_module_summary
@@ -164,6 +174,41 @@ def convert_project(
     if link_log_path is not None:
         link_resolution = resolve_log(link_log_path, [Path(library) for library in libraries])
         link_resolution["module_slices"] = export_module_slices(workspace, link_resolution["module_plan"])
+        planned_symbols: set[str] = set()
+        for library, plan_entries in link_resolution["module_plan"].items():
+            slice_entries = {
+                entry["module"]: entry
+                for entry in link_resolution["module_slices"].get(library, [])
+            }
+            for plan_entry in plan_entries:
+                planned_symbols.update(plan_entry["symbols"])
+                slice_entry = slice_entries.get(plan_entry["module"])
+                normalized_ir: dict[str, object] = {}
+                if slice_entry is not None:
+                    normalized_ir = json.loads(Path(slice_entry["ir_path"]).read_text(encoding="utf-8"))
+                emitted.append(
+                    emit_auto_stub_module(
+                        workspace,
+                        plan_entry["module"],
+                        plan_entry["symbols"],
+                        normalized_ir,
+                    )
+                )
+        ownerless_symbols = [
+            symbol
+            for symbol, matches in link_resolution["libraries"].items()
+            if not matches
+        ]
+        emitted_symbols = set(planned_symbols) | set(ownerless_symbols)
+        if ownerless_symbols:
+            emitted.append(emit_ownerless_stub(workspace, ownerless_symbols))
+        supplemental_symbols = [
+            symbol
+            for symbol in link_resolution["undefined_symbols"]
+            if symbol not in emitted_symbols
+        ]
+        if supplemental_symbols:
+            emitted.append(emit_fallback_stub(workspace, "remaining", supplemental_symbols))
         link_resolution_summary = summarize_link_resolution(link_resolution)
 
     write_manifest(

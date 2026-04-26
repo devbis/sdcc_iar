@@ -86,9 +86,11 @@ class ConvertCliTest(unittest.TestCase):
             module_slice_file = Path(td) / "module-slices" / "Security" / "hal_aes.bin"
             module_slice_summary = Path(td) / "module-slices" / "Security" / "hal_aes.json"
             module_slice_ir = Path(td) / "module-slices" / "Security" / "hal_aes.ir.json"
+            auto_stub_asm = Path(td) / "hal_aes.auto.asm"
             self.assertTrue(module_slice_file.exists())
             self.assertTrue(module_slice_summary.exists())
             self.assertTrue(module_slice_ir.exists())
+            self.assertTrue(auto_stub_asm.exists())
             self.assertEqual(
                 plan_payload["project"],
                 "samplelight-cc2530db-coordinator",
@@ -109,6 +111,9 @@ class ConvertCliTest(unittest.TestCase):
                         ).resolve()
                     )
                 ],
+            )
+            self.assertTrue(
+                any(path.endswith(".auto.rel") for path in payload["emitted_artifacts"])
             )
             self.assertIn(
                 "APSMEDE",
@@ -192,6 +197,9 @@ class ConvertCliTest(unittest.TestCase):
             self.assertIn("_HalAesInit", summary_payload["symbols"])
             self.assertEqual(ir_payload["module"], "hal_aes")
             self.assertIn("_HalAesInit", ir_payload["public_callables"])
+            auto_stub_text = auto_stub_asm.read_text(encoding="utf-8")
+            self.assertIn(".globl _HalAesInit", auto_stub_text)
+            self.assertNotIn(".globl __HalAesInit", auto_stub_text)
             self.assertTrue(
                 any(
                     entry["module"] == "hal_aes"

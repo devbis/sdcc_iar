@@ -29,11 +29,17 @@ int summary(struct area * areap)
 
     #define EQ(A,B) !as_strcmpi((A),(B))
     #define MIN_STACK 16
+    const int relax_memory = getenv("SDLD_RELAX_MEMORY") && strcmp(getenv("SDLD_RELAX_MEMORY"), "0");
     #define REPORT_ERROR(A, H) \
     {\
-        fprintf(of, "%s%s", (H)?"*** ERROR: ":"", (A)); \
-        fprintf(stderr, "%s%s", (H)?"\n?ASlink-Error-":"",(A)); \
-        toreturn=1; \
+        if (relax_memory) { \
+            fprintf(of, "%s%s", (H)?"*** WARNING: ":"", (A)); \
+            fprintf(stderr, "%s%s", (H)?"\n?ASlink-Warning-":"",(A)); \
+        } else { \
+            fprintf(of, "%s%s", (H)?"*** ERROR: ":"", (A)); \
+            fprintf(stderr, "%s%s", (H)?"\n?ASlink-Error-":"",(A)); \
+            toreturn=1; \
+        } \
     }
 
     #define REPORT_WARNING(A, H) \
@@ -471,6 +477,7 @@ int summary2(struct area * areap)
     /* only for 8051 target */
 
     #define EQ(A,B) !as_strcmpi((A),(B))
+    const int relax_memory = getenv("SDLD_RELAX_MEMORY") && strcmp(getenv("SDLD_RELAX_MEMORY"), "0");
 
     char buff[128];
     int toreturn = 0;
@@ -605,10 +612,16 @@ int summary2(struct area * areap)
     {
         if(xp->a_unaloc>0)
         {
-            fprintf(of, "\nERROR: Couldn't get %d byte%s allocated"
-                        " in internal RAM for area %s.",
-                        xp->a_unaloc, xp->a_unaloc>1?"s":"", xp->a_id);
-            toreturn=1;
+            fprintf(
+                of,
+                "\n%s: Couldn't get %d byte%s allocated in internal RAM for area %s.",
+                relax_memory ? "WARNING" : "ERROR",
+                xp->a_unaloc,
+                xp->a_unaloc>1?"s":"",
+                xp->a_id
+            );
+            if (!relax_memory)
+                toreturn=1;
         }
         xp=xp->a_ap;
     }
@@ -699,13 +712,27 @@ int summary2(struct area * areap)
         ((((int)XRam.Size+(int)Paged.Size)>xram_size)&&(xram_size>=0)) )
     {
         sprintf(buff, "Insufficient EXTERNAL RAM memory.\n");
-        REPORT_ERROR(buff, 1);
+        if (relax_memory) {
+            fprintf(of, "*** WARNING: %s", buff);
+            fprintf(stderr, "\n?ASlink-Warning-%s", buff);
+        } else {
+            fprintf(of, "*** ERROR: %s", buff);
+            fprintf(stderr, "\n?ASlink-Error-%s", buff);
+            toreturn = 1;
+        }
     }
     if( ((Rom.End) > Rom.Max) ||
         (((int)Rom.Size>code_size)&&(code_size>=0)) )
     {
         sprintf(buff, "Insufficient ROM/EPROM/FLASH memory.\n");
-        REPORT_ERROR(buff, 1);
+        if (relax_memory) {
+            fprintf(of, "*** WARNING: %s", buff);
+            fprintf(stderr, "\n?ASlink-Warning-%s", buff);
+        } else {
+            fprintf(of, "*** ERROR: %s", buff);
+            fprintf(stderr, "\n?ASlink-Error-%s", buff);
+            toreturn = 1;
+        }
     }
 
     fclose(of);
@@ -716,4 +743,3 @@ int summary2(struct area * areap)
     return 0;
   }
 }
-

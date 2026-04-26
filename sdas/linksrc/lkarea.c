@@ -24,6 +24,13 @@
 
 #include "aslink.h"
 
+static int
+relax_memory_errors(void)
+{
+	const char *value = getenv("SDLD_RELAX_MEMORY");
+	return value && value[0] && strcmp(value, "0");
+}
+
 /*)Module	lkarea.c
  *
  *	The module lkarea.c contains the functions which
@@ -1082,8 +1089,12 @@ a_uint lnksect2 (struct area *tap, int locIndex)
                                         else /*Couldn't find a chunk big enough: report the problem.*/
                                         {
                                                 tap->a_unaloc=taxp->a_size;
-                                                fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
-                                                lkerr++;
+                                                if (relax_memory_errors())
+                                                        fprintf(stderr, "?ASlink-Warning-Could not get %d consecutive byte%s in internal RAM for area %s.\n", taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                else {
+                                                        fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                        lkerr++;
+                                                }
 					}
 
                                         /* avoid redundant processing SSEG */
@@ -1127,8 +1138,12 @@ a_uint lnksect2 (struct area *tap, int locIndex)
                                         else /*Couldn't find a chunk big enough: report the problem.*/
                                         {
                                                 tap->a_unaloc=taxp->a_size;
-                                                fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
-                                                lkerr++;
+                                                if (relax_memory_errors())
+                                                        fprintf(stderr, "?ASlink-Warning-Could not get %d consecutive byte%s in internal RAM for area %s.\n", taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                else {
+                                                        fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                        lkerr++;
+                                                }
 					}
 				}
 			}
@@ -1218,8 +1233,12 @@ a_uint lnksect2 (struct area *tap, int locIndex)
                                                 addr += taxp->a_size;
                                                 size += taxp->a_size;
                                                 tap->a_unaloc+=taxp->a_size;
-                                                fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
-                                                lkerr++;
+                                                if (relax_memory_errors())
+                                                        fprintf(stderr, "?ASlink-Warning-Could not get %d consecutive byte%s in internal RAM for area %s.\n", taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                else {
+                                                        fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                        lkerr++;
+                                                }
 					}
 				}
                                 else if (fchar=='B')
@@ -1244,8 +1263,12 @@ a_uint lnksect2 (struct area *tap, int locIndex)
                                         else /*Couldn't find a chunk big enough: report the problem.*/
                                         {
                                                 tap->a_unaloc=taxp->a_size;
-                                                fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
-                                                lkerr++;
+                                                if (relax_memory_errors())
+                                                        fprintf(stderr, "?ASlink-Warning-Could not get %d consecutive byte%s in internal RAM for area %s.\n", taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                else {
+                                                        fprintf(stderr, ErrMsg, taxp->a_size, taxp->a_size>1?"s":"", tap->a_id);
+                                                        lkerr++;
+                                                }
 					}
                                         size += taxp->a_size;
 				}
@@ -1307,4 +1330,3 @@ a_uint lnksect2 (struct area *tap, int locIndex)
         return addr;
 }
 /* end sdld specific */
-
