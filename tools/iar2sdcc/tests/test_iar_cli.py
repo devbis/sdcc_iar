@@ -245,3 +245,6 @@ class ConvertCliTest(unittest.TestCase):
             self.assertEqual(payload["calling_convention"], "xdata_reentrant")
             self.assertEqual(payload["code_model"], "banked")
             self.assertIn("_HalAesInit", payload["symbols"])
+            self.assertIn("_HalAesInit", payload["exports"])
+            self.assertIn("_osal_memcpy", payload["imports"])
+            self.assertIn("_Jf1g", payload["noise_symbols"])
