@@ -155,6 +155,24 @@ def classify_export_visibility(exports: list[str]) -> tuple[list[str], list[str]
     return public_exports, internal_exports
 
 
+def _callable_symbols(symbols: list[str]) -> list[str]:
+    return [
+        symbol
+        for symbol in symbols
+        if not symbol.endswith("_t") and not (symbol.startswith("_p") and symbol[2:3].isupper())
+    ]
+
+
+def _data_symbols(symbols: list[str]) -> list[str]:
+    return [
+        symbol
+        for symbol in symbols
+        if symbol.endswith("_t")
+        or (symbol.startswith("_p") and symbol[2:3].isupper())
+        or symbol.startswith(("_src", "_dst", "_xfer", "_ctrl", "_dma"))
+    ]
+
+
 def build_normalized_ir(
     module: str,
     calling_convention: str | None,
@@ -162,8 +180,19 @@ def build_normalized_ir(
     data_model: str | None,
     exports: list[str],
     imports: list[str],
+    unknown_symbols: list[str],
 ) -> dict[str, object]:
     public_exports, internal_exports = classify_export_visibility(exports)
+    public_callables = _callable_symbols(public_exports)
+    internal_callables = _callable_symbols(internal_exports)
+    data_symbols = sorted(
+        set(
+            _data_symbols(internal_exports)
+            + _data_symbols(exports)
+            + _data_symbols(imports)
+            + _data_symbols(unknown_symbols)
+        )
+    )
     return {
         "module": module,
         "calling_convention": calling_convention,
@@ -171,6 +200,9 @@ def build_normalized_ir(
         "data_model": data_model,
         "public_exports": public_exports,
         "internal_exports": internal_exports,
+        "public_callables": public_callables,
+        "internal_callables": internal_callables,
+        "data_symbols": data_symbols,
         "required_imports": imports,
     }
 
@@ -208,5 +240,6 @@ def parse_module_summary(path: Path) -> ModuleSummary:
             data_model,
             exports,
             imports,
+            unknown_symbols,
         ),
     )

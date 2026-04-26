@@ -29,14 +29,18 @@ def export_module_slices(
                 continue
             artifact = library_dir / f"{module}.bin"
             summary_path = artifact.with_suffix(".json")
+            ir_path = artifact.with_name(f"{artifact.stem}.ir.json")
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_bytes(data[span.start_offset:span.end_offset])
-            write_json(summary_path, parse_module_summary(artifact).to_dict())
+            summary = parse_module_summary(artifact)
+            write_json(summary_path, summary.to_dict())
+            write_json(ir_path, summary.normalized_ir)
             entries.append(
                 {
                     "module": module,
                     "path": str(artifact),
                     "summary_path": str(summary_path),
+                    "ir_path": str(ir_path),
                     "start_offset": span.start_offset,
                     "end_offset": span.end_offset,
                     "size": span.size,

@@ -85,8 +85,10 @@ class ConvertCliTest(unittest.TestCase):
             plan_payload = json.loads(module_plan_file.read_text(encoding="utf-8"))
             module_slice_file = Path(td) / "module-slices" / "Security" / "hal_aes.bin"
             module_slice_summary = Path(td) / "module-slices" / "Security" / "hal_aes.json"
+            module_slice_ir = Path(td) / "module-slices" / "Security" / "hal_aes.ir.json"
             self.assertTrue(module_slice_file.exists())
             self.assertTrue(module_slice_summary.exists())
+            self.assertTrue(module_slice_ir.exists())
             self.assertEqual(
                 plan_payload["project"],
                 "samplelight-cc2530db-coordinator",
@@ -183,10 +185,13 @@ class ConvertCliTest(unittest.TestCase):
                 payload["link_resolution"]["module_plan"],
             )
             summary_payload = json.loads(module_slice_summary.read_text(encoding="utf-8"))
+            ir_payload = json.loads(module_slice_ir.read_text(encoding="utf-8"))
             self.assertEqual(summary_payload["module"], "hal_aes")
             self.assertEqual(summary_payload["code_model"], "banked")
             self.assertEqual(summary_payload["data_model"], "large")
             self.assertIn("_HalAesInit", summary_payload["symbols"])
+            self.assertEqual(ir_payload["module"], "hal_aes")
+            self.assertIn("_HalAesInit", ir_payload["public_callables"])
             self.assertTrue(
                 any(
                     entry["module"] == "hal_aes"
@@ -253,3 +258,6 @@ class ConvertCliTest(unittest.TestCase):
             self.assertIn("_AesLoadIV", payload["normalized_ir"]["internal_exports"])
             self.assertIn("_sspAesEncryptHW", payload["normalized_ir"]["internal_exports"])
             self.assertIn("_osal_memcpy", payload["normalized_ir"]["required_imports"])
+            self.assertIn("_HalAesInit", payload["normalized_ir"]["public_callables"])
+            self.assertIn("_sspAesEncryptHW", payload["normalized_ir"]["internal_callables"])
+            self.assertIn("_dmaCh1234", payload["normalized_ir"]["data_symbols"])
