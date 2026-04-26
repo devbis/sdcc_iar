@@ -1,0 +1,21 @@
+#!/bin/bash
+
+abs_top_builddir=@abs_top_builddir@
+export PATH=${abs_top_builddir}/support/cpp/gcc:$PATH
+
+filtered_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --obj-ext=*)
+      continue
+      ;;
+  esac
+  filtered_args+=("$arg")
+done
+
+if [ -x "${abs_top_builddir}/support/cpp/gcc/cpp" ]; then
+  exec "${abs_top_builddir}/support/cpp/gcc/cpp" "${filtered_args[@]}"
+fi
+
+cpp_real=${SDCPP_CPP:-clang}
+exec "${cpp_real}" -E -U__GNUC__ -U__GNUC_MINOR__ -U__GNUC_PATCHLEVEL__ -U__clang__ -U__llvm__ "${filtered_args[@]}"

@@ -1,0 +1,22 @@
+#!/bin/sh
+
+abs_top_builddir=@abs_top_builddir@
+abs_top_srcdir=@abs_top_srcdir@
+export PATH=${abs_top_builddir}/src:${abs_top_builddir}/bin:$PATH
+
+target=""
+for arg in "$@"; do
+  case "$arg" in
+    -m*)
+      target=${arg#-m}
+      ;;
+  esac
+done
+
+if [ -n "${target}" ] && [ -d "${abs_top_srcdir}/device/include/${target}" ]; then
+  set -- "-I${abs_top_srcdir}/device/include/${target}" "-I${abs_top_srcdir}/device/include" "$@"
+elif [ -d "${abs_top_srcdir}/device/include" ]; then
+  set -- "-I${abs_top_srcdir}/device/include" "$@"
+fi
+
+sdcc "$@"
