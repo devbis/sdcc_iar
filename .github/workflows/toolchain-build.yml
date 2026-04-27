@@ -96,13 +96,17 @@ jobs:
             export LDFLAGS="-L$(brew --prefix zlib)/lib -L$(brew --prefix boost)/lib"
           fi
 
-          "$SRC_DIR/configure" \
+          if ! "$SRC_DIR/configure" \
             --prefix="$PREFIX_DIR" \
             --disable-sdcdb \
             --disable-sdbinutils \
+            --disable-sdcpp \
             --disable-ucsim \
             --disable-pic14-port \
-            --disable-pic16-port
+            --disable-pic16-port; then
+            cat config.log
+            exit 1
+          fi
 
           make -j"$(getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || echo 3)"
           make install
@@ -132,14 +136,18 @@ jobs:
           export lib_dir_suffix='lib'
           export non_free_lib_dir_suffix='non-free/lib'
 
-          "$SRC_DIR/configure" \
+          if ! "$SRC_DIR/configure" \
             --prefix=/sdcc \
             --datarootdir=/sdcc \
             --disable-sdcdb \
             --disable-sdbinutils \
+            --disable-sdcpp \
             --disable-ucsim \
             --disable-pic14-port \
-            --disable-pic16-port
+            --disable-pic16-port; then
+            cat config.log
+            exit 1
+          fi
 
           make -j"$(nproc)"
           make install DESTDIR="$PACKAGE_DIR"
