@@ -75,7 +75,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           set -euxo pipefail
-          brew install bison boost flex make zlib
+          brew install bison boost flex gcc make zlib
           echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
           echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
         shell: bash
@@ -91,10 +91,17 @@ jobs:
           mkdir -p "$BUILD_DIR" "$PREFIX_DIR"
           cd "$BUILD_DIR"
 
+          export LIB_TYPE="SDCCLIB"
+
           if [ "$RUNNER_OS" = "macOS" ]; then
+            GCC_BIN_DIR="$(brew --prefix gcc)/bin"
+            export CC="$(printf '%s\n' "$GCC_BIN_DIR"/gcc-[0-9]* | sort -V | tail -n1)"
+            export CXX="$(printf '%s\n' "$GCC_BIN_DIR"/g++-[0-9]* | sort -V | tail -n1)"
             export CPPFLAGS="-I$(brew --prefix zlib)/include -I$(brew --prefix boost)/include"
             export LDFLAGS="-L$(brew --prefix zlib)/lib -L$(brew --prefix boost)/lib"
           fi
+
+          export SDCPP_CPP="${CC:-gcc}"
 
           if ! "$SRC_DIR/configure" \
             --prefix="$PREFIX_DIR" \
@@ -129,6 +136,8 @@ jobs:
           export LDFLAGS="-L/mingw64/lib"
           export CC="gcc"
           export CXX="g++"
+          export SDCPP_CPP="gcc"
+          export LIB_TYPE="SDCCLIB"
           export sdccconf_h_dir_separator='\\'
           export docdir='${datarootdir}/doc'
           export include_dir_suffix='include'
