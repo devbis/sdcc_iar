@@ -42,6 +42,9 @@ static char _defaultRules[] =
 #define OPTION_LARGE_MODEL          "--model-large"
 #define OPTION_HUGE_MODEL           "--model-huge"
 #define OPTION_STACK_SIZE           "--stack-size"
+#define OPTION_ABI_IAR              "--abi-iar"
+
+int mcs51IarAbi = 0;
 
 static OPTION _mcs51_options[] =
   {
@@ -50,6 +53,7 @@ static OPTION _mcs51_options[] =
     { 0, OPTION_LARGE_MODEL, NULL, "external data space is used"},
     { 0, OPTION_HUGE_MODEL, NULL, "functions are banked, data in external space"},
     { 0, OPTION_STACK_SIZE,  &options.stack_size, "Tells the linker to allocate this space for stack", CLAT_INTEGER },
+    { 0, OPTION_ABI_IAR,     &mcs51IarAbi, "Use the IAR 8051 calling convention for mcs51 code generation" },
     { 0, "--acall-ajmp",     &options.acall_ajmp, "Use acall/ajmp instead of lcall/ljmp" },
     { 0, "--no-ret-without-call", &options.no_ret_without_call, "Do not use ret independent of acall/lcall" },
     { 0, NULL }
@@ -67,6 +71,7 @@ static char *_mcs51_keywords[] =
   "far",
   "generic",
   "idata",
+  "iar",
   "interrupt",
   "naked",
   "near",
@@ -125,6 +130,9 @@ _mcs51_regparm (sym_link *l, bool reentrant)
 
   if (IS_SPEC(l) && (SPEC_NOUN(l) == V_BIT))
     {
+      if (mcs51IsIarAbi (regParmFuncType))
+        return 0;
+
       /* bit parameters go to b0 thru b7 */
       if (reentrant && (regBitParmFlg < 8))
         {
@@ -237,6 +245,8 @@ _mcs51_genAssemblerStart (FILE * of)
       /*if(options.float_rent)     fprintf (asmFile, " --float-rent"); */
       if (options.noRegParams)
         fprintf (of, " --no-reg-params");
+      if (mcs51IarAbi)
+        fprintf (of, " %s", OPTION_ABI_IAR);
       if (options.all_callee_saves)
         fprintf (of, " --all-callee-saves");
       fprintf (of, "\n");

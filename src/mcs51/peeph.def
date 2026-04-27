@@ -8,6 +8,12 @@ replace {
 }
 
 replace {
+	mov	a,a
+} by {
+	;	Peephole 2.b	removed redundant mov a,a
+}
+
+replace {
 // saving 2 byte
 	mov	%1,#0x00
 	mov	a,#0x00
