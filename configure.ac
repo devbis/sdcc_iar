@@ -15,10 +15,10 @@ AC_PROG_AWK
 
 AC_MSG_CHECKING(version of the package)
 if test -f ${srcdir}/.version; then
-  { read VERSION; } < ${srcdir}/.version
+  VERSION=`sed -n '1{s/\r$//;p;q;}' ${srcdir}/.version`
   AC_MSG_RESULT($VERSION)
 elif test -f ../.version; then
-  { read VERSION; } < ../.version
+  VERSION=`sed -n '1{s/\r$//;p;q;}' ../.version`
   AC_MSG_RESULT($VERSION)
 else
   VERSION="0.0.0"

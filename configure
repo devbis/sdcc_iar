@@ -3146,11 +3146,11 @@ done
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking version of the package" >&5
 printf %s "checking version of the package... " >&6; }
 if test -f ${srcdir}/.version; then
-  { read VERSION; } < ${srcdir}/.version
+  VERSION=`sed -n '1{s/\r$//;p;q;}' ${srcdir}/.version`
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $VERSION" >&5
 printf "%s\n" "$VERSION" >&6; }
 elif test -f ../.version; then
-  { read VERSION; } < ../.version
+  VERSION=`sed -n '1{s/\r$//;p;q;}' ../.version`
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $VERSION" >&5
 printf "%s\n" "$VERSION" >&6; }
 else
@@ -10939,4 +10939,3 @@ sdcc ${VERSION} is now configured for
                         ${nonFreeLibPath3}${dirch}<model>
 " >&6; }
 # End of configure/configure.in
-
