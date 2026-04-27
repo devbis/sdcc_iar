@@ -1,0 +1,149 @@
+name: Build Toolchains
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux amd64
+            os: ubuntu-24.04
+            artifact_name: sdcc-linux-amd64
+            archive_name: sdcc-linux-amd64.tar.xz
+          - name: windows amd64
+            os: windows-latest
+            artifact_name: sdcc-windows-amd64
+            archive_name: sdcc-windows-amd64.tar.xz
+          - name: macos arm64
+            os: macos-14
+            artifact_name: sdcc-macos-arm64
+            archive_name: sdcc-macos-arm64.tar.xz
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            bison
+            flex
+            git
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-zlib
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bison \
+            flex \
+            g++ \
+            gcc \
+            libboost-dev \
+            make \
+            python3 \
+            zlib1g-dev
+        shell: bash
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          set -euxo pipefail
+          brew install bison boost flex make zlib
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+        shell: bash
+
+      - name: Build and package on Unix
+        if: runner.os != 'Windows'
+        run: |
+          set -euxo pipefail
+          SRC_DIR="$GITHUB_WORKSPACE"
+          BUILD_DIR="$SRC_DIR/build/${{ matrix.artifact_name }}"
+          PREFIX_DIR="$SRC_DIR/out/${{ matrix.artifact_name }}"
+
+          mkdir -p "$BUILD_DIR" "$PREFIX_DIR"
+          cd "$BUILD_DIR"
+
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            export CPPFLAGS="-I$(brew --prefix zlib)/include -I$(brew --prefix boost)/include"
+            export LDFLAGS="-L$(brew --prefix zlib)/lib -L$(brew --prefix boost)/lib"
+          fi
+
+          "$SRC_DIR/configure" \
+            --prefix="$PREFIX_DIR" \
+            --disable-sdcdb \
+            --disable-sdbinutils \
+            --disable-ucsim
+
+          make -j"$(getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || echo 3)"
+          make install
+
+          tar -C "$PREFIX_DIR" -cJf "$SRC_DIR/${{ matrix.archive_name }}" .
+        shell: bash
+
+      - name: Build and package on Windows
+        if: runner.os == 'Windows'
+        run: |
+          set -euxo pipefail
+          SRC_DIR="$(cygpath -u "$GITHUB_WORKSPACE")"
+          BUILD_DIR="$SRC_DIR/build/${{ matrix.artifact_name }}"
+          PACKAGE_DIR="$SRC_DIR/out/${{ matrix.artifact_name }}"
+
+          mkdir -p "$BUILD_DIR" "$PACKAGE_DIR"
+          cd "$BUILD_DIR"
+
+          export CPPFLAGS="-I/mingw64/include"
+          export LDFLAGS="-L/mingw64/lib"
+          export sdccconf_h_dir_separator='\\'
+
+          "$SRC_DIR/configure" \
+            --prefix=/sdcc \
+            --datarootdir=/sdcc \
+            docdir='${datarootdir}/doc' \
+            include_dir_suffix=include \
+            non_free_include_dir_suffix=non-free/include \
+            lib_dir_suffix=lib \
+            non_free_lib_dir_suffix=non-free/lib \
+            --disable-sdcdb \
+            --disable-sdbinutils \
+            --disable-ucsim
+
+          make -j"$(nproc)"
+          make install DESTDIR="$PACKAGE_DIR"
+
+          tar -C "$PACKAGE_DIR/sdcc" -cJf "$SRC_DIR/${{ matrix.archive_name }}" .
+        shell: msys2 {0}
+
+      - name: Upload toolchain artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ github.workspace }}/${{ matrix.archive_name }}
+          if-no-files-found: error
