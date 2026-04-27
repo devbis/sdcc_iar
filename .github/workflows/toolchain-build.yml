@@ -284,6 +284,8 @@ jobs:
             '  args[j++] = "-U__llvm__";' \
             '  for (int i = 1; i < argc; i++)' \
             '    {' \
+            '      if (strncmp(argv[i], "--obj-ext=", 10) == 0)' \
+            '        continue;' \
             '      if (strcmp(argv[i], "-std=c23") == 0)' \
             '        {' \
             '          args[j++] = "-std=c2x";' \
