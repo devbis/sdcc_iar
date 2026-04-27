@@ -100,7 +100,9 @@ jobs:
             --prefix="$PREFIX_DIR" \
             --disable-sdcdb \
             --disable-sdbinutils \
-            --disable-ucsim
+            --disable-ucsim \
+            --disable-pic14-port \
+            --disable-pic16-port
 
           make -j"$(getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || echo 3)"
           make install
@@ -121,19 +123,23 @@ jobs:
 
           export CPPFLAGS="-I/mingw64/include"
           export LDFLAGS="-L/mingw64/lib"
+          export CC="gcc"
+          export CXX="g++"
           export sdccconf_h_dir_separator='\\'
+          export docdir='${datarootdir}/doc'
+          export include_dir_suffix='include'
+          export non_free_include_dir_suffix='non-free/include'
+          export lib_dir_suffix='lib'
+          export non_free_lib_dir_suffix='non-free/lib'
 
           "$SRC_DIR/configure" \
             --prefix=/sdcc \
             --datarootdir=/sdcc \
-            docdir='${datarootdir}/doc' \
-            include_dir_suffix=include \
-            non_free_include_dir_suffix=non-free/include \
-            lib_dir_suffix=lib \
-            non_free_lib_dir_suffix=non-free/lib \
             --disable-sdcdb \
             --disable-sdbinutils \
-            --disable-ucsim
+            --disable-ucsim \
+            --disable-pic14-port \
+            --disable-pic16-port
 
           make -j"$(nproc)"
           make install DESTDIR="$PACKAGE_DIR"
