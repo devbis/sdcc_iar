@@ -103,6 +103,7 @@ int summary(struct area * areap)
     _Mem Rom6808 =   {0xffff, 0, 65536, "ROM/EPROM/FLASH",        0x0200};
 
     _Mem *Ram = NULL;
+    unsigned long effective_rom_max;
 
     _Mem IRam =  {0, 0, 0, "", 0};
     _Mem Stack = {0, 0, 0, "", 0};
@@ -123,6 +124,8 @@ int summary(struct area * areap)
         memcpy(&XRam, &XRam6808, sizeof (_Mem));
         memcpy(&Rom, &Rom6808, sizeof (_Mem));
     }
+
+    effective_rom_max = code_size < 0 ? Rom.Max : (unsigned long)code_size;
 
     if (stacksize == 0) stacksize = MIN_STACK;
 
@@ -438,7 +441,7 @@ int summary(struct area * areap)
         sprintf(end,  "0x%04lx", Rom.Size+Rom.Start-1);
     }
     sprintf(size, "%5lu", Rom.Size);
-    sprintf(max, "%5lu", code_size<0?Rom.Max:code_size);
+    sprintf(max, "%5lu", effective_rom_max);
     fprintf(of, format, Rom.Name, start, end, size, max);
 
     /*Report any excess:*/
@@ -455,8 +458,7 @@ int summary(struct area * areap)
         sprintf(buff, "Insufficient EXTERNAL RAM memory.\n");
         REPORT_ERROR(buff, 1);
     }
-    if( ((Rom.Start+Rom.Size)>Rom.Max) ||
-        (((int)Rom.Size>code_size)&&(code_size>=0)) )
+    if( ((Rom.Start+Rom.Size)>effective_rom_max) )
     {
         sprintf(buff, "Insufficient ROM/EPROM/FLASH memory.\n");
         REPORT_ERROR(buff, 1);
@@ -508,6 +510,7 @@ int summary2(struct area * areap)
     _Mem Paged={0xffff, 0, 0,   256, "PAGED EXT. RAM",  A3_PAG};
     _Mem XRam= {0xffff, 0, 0, 65536, "EXTERNAL RAM",    0x0100};
     _Mem Rom=  {0xffff, 0, 0, 65536, "ROM/EPROM/FLASH", 0x0200};
+    unsigned long effective_rom_max = code_size < 0 ? Rom.Max : (unsigned long)code_size;
 
     if(rflag) /*For the DS390*/
     {
@@ -704,7 +707,7 @@ int summary2(struct area * areap)
         sprintf(end,  "0x%04lx", Rom.End-1);
     }
     sprintf(size, "%5lu", Rom.Size);
-    sprintf(max, "%5lu", code_size<0?Rom.Max:code_size);
+    sprintf(max, "%5lu", effective_rom_max);
     fprintf(of, format, Rom.Name, start, end, size, max);
 
     /*Report any excess:*/
@@ -721,8 +724,7 @@ int summary2(struct area * areap)
             toreturn = 1;
         }
     }
-    if( ((Rom.End) > Rom.Max) ||
-        (((int)Rom.Size>code_size)&&(code_size>=0)) )
+    if( ((Rom.End) > effective_rom_max) )
     {
         sprintf(buff, "Insufficient ROM/EPROM/FLASH memory.\n");
         if (relax_memory) {
