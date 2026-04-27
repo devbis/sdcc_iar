@@ -1227,14 +1227,15 @@ copyStr (const char *src, size_t *size)
   return dbuf_detach_c_str (&dbuf);
 }
 
-static char prefix[256] = "";
-static char suffix[256] = "";
-static char cmd[4096] = "";
+static char prefix[PATH_MAX] = "";
+static char suffix[PATH_MAX] = "";
+static char *cmd;
 
 void getPrefixSuffix(const char *arg)
 {
   const char *p;
   const char sdcc[] = "sdcc";
+  size_t prefix_len;
 
   if (!arg)
     return;
@@ -1253,24 +1254,35 @@ void getPrefixSuffix(const char *arg)
     return;
 
   /* copy prefix and suffix */
-  strncpy (prefix, arg, p - arg);
+  prefix_len = p - arg;
+  wassertl (prefix_len < sizeof (prefix), "sdcc command prefix too long");
+  memcpy (prefix, arg, prefix_len);
+  prefix[prefix_len] = '\0';
+
+  wassertl (strlen (p + strlen (sdcc)) < sizeof (suffix), "sdcc command suffix too long");
   strcpy (suffix, p + strlen (sdcc));
 }
 
 char *setPrefixSuffix(const char *arg)
 {
   const char *p;
+  size_t arg_len;
+  size_t total_len;
 
   if (!arg)
     return NULL;
-  else
-    memset (cmd, 0x00, sizeof (cmd));
 
   /* find the core name of command line */
   for (p = arg; (*p) && isblank (*p); p++);
   arg = p;
   assert (strstr (arg, ".exe") == NULL);
   for (p = arg; (*p) && !isblank (*p); p++);
+
+  arg_len = strlen (arg);
+  total_len = strlen (prefix) + arg_len + strlen (suffix) + 1;
+
+  Safe_free (cmd);
+  cmd = Safe_malloc (total_len);
 
   /* compose new command line with prefix and suffix */
   strcpy (cmd, prefix);
@@ -1501,4 +1513,3 @@ process_identifier (char *dest, const char *src, size_t n)
     }
 #endif
 }
-

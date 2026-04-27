@@ -38,6 +38,14 @@ eval_macros (hTab * pvals, const char *pfrom)
   dbuf_init (&dbuf, 256);
   while (*pfrom)
     {
+      if (*pfrom == '\\' && pfrom[1] != '\0')
+        {
+          /* Preserve shell-escaped characters such as \" and \{..\}. */
+          dbuf_append_char (&dbuf, *pfrom++);
+          dbuf_append_char (&dbuf, *pfrom++);
+          continue;
+        }
+
       switch (*pfrom)
         {
         case '"':
