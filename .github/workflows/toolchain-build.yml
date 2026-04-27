@@ -87,11 +87,10 @@ jobs:
           SRC_DIR="$GITHUB_WORKSPACE"
           BUILD_DIR="$SRC_DIR/build/${{ matrix.artifact_name }}"
           PREFIX_DIR="$SRC_DIR/out/${{ matrix.artifact_name }}"
+          CPP_SHIM="$BUILD_DIR/sdcpp-host.sh"
 
           mkdir -p "$BUILD_DIR" "$PREFIX_DIR"
           cd "$BUILD_DIR"
-
-          export LIB_TYPE="SDCCLIB"
 
           if [ "$RUNNER_OS" = "macOS" ]; then
             GCC_BIN_DIR="$(brew --prefix gcc)/bin"
@@ -101,12 +100,25 @@ jobs:
             export LDFLAGS="-L$(brew --prefix zlib)/lib -L$(brew --prefix boost)/lib"
           fi
 
-          export SDCPP_CPP="${CC:-gcc}"
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            'set -euo pipefail' \
+            'translated=()' \
+            'for arg in "$@"; do' \
+            '  if [[ "$arg" == "-std=c23" ]]; then' \
+            '    arg="-std=c2x"' \
+            '  fi' \
+            '  translated+=("$arg")' \
+            'done' \
+            'exec "${SDCPP_REAL:-gcc}" -E -U__GNUC__ -U__GNUC_MINOR__ -U__GNUC_PATCHLEVEL__ -U__clang__ -U__llvm__ "${translated[@]}"' \
+            > "$CPP_SHIM"
+          chmod +x "$CPP_SHIM"
+          export SDCPP_REAL="${CC:-gcc}"
+          export SDCPP_CPP="$CPP_SHIM"
 
           if ! "$SRC_DIR/configure" \
             --prefix="$PREFIX_DIR" \
             --disable-sdcdb \
-            --disable-sdbinutils \
             --disable-sdcpp \
             --disable-ucsim \
             --disable-pic14-port \
@@ -128,6 +140,7 @@ jobs:
           SRC_DIR="$(cygpath -u "$GITHUB_WORKSPACE")"
           BUILD_DIR="$SRC_DIR/build/${{ matrix.artifact_name }}"
           PACKAGE_DIR="$SRC_DIR/out/${{ matrix.artifact_name }}"
+          CPP_SHIM="$BUILD_DIR/sdcpp-host.sh"
 
           mkdir -p "$BUILD_DIR" "$PACKAGE_DIR"
           cd "$BUILD_DIR"
@@ -136,8 +149,6 @@ jobs:
           export LDFLAGS="-L/mingw64/lib"
           export CC="gcc"
           export CXX="g++"
-          export SDCPP_CPP="gcc"
-          export LIB_TYPE="SDCCLIB"
           export sdccconf_h_dir_separator='\\'
           export docdir='${datarootdir}/doc'
           export include_dir_suffix='include'
@@ -145,11 +156,26 @@ jobs:
           export lib_dir_suffix='lib'
           export non_free_lib_dir_suffix='non-free/lib'
 
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            'set -euo pipefail' \
+            'translated=()' \
+            'for arg in "$@"; do' \
+            '  if [[ "$arg" == "-std=c23" ]]; then' \
+            '    arg="-std=c2x"' \
+            '  fi' \
+            '  translated+=("$arg")' \
+            'done' \
+            'exec "${SDCPP_REAL:-gcc}" -E -U__GNUC__ -U__GNUC_MINOR__ -U__GNUC_PATCHLEVEL__ -U__clang__ -U__llvm__ "${translated[@]}"' \
+            > "$CPP_SHIM"
+          chmod +x "$CPP_SHIM"
+          export SDCPP_REAL="gcc"
+          export SDCPP_CPP="$CPP_SHIM"
+
           if ! "$SRC_DIR/configure" \
             --prefix=/sdcc \
             --datarootdir=/sdcc \
             --disable-sdcdb \
-            --disable-sdbinutils \
             --disable-sdcpp \
             --disable-ucsim \
             --disable-pic14-port \
@@ -157,6 +183,47 @@ jobs:
             cat config.log
             exit 1
           fi
+
+          mkdir -p "$BUILD_DIR/bin"
+          printf '%s\n' \
+            '#include <process.h>' \
+            '#include <stdio.h>' \
+            '#include <stdlib.h>' \
+            '#include <string.h>' \
+            '' \
+            'int main(int argc, char **argv)' \
+            '{' \
+            '  const char *real = getenv("SDCPP_REAL");' \
+            '  int extra = 7;' \
+            '  char **args = (char **)calloc((size_t)argc + extra, sizeof(char *));' \
+            '  int j = 0;' \
+            '  int rc;' \
+            '' \
+            '  if (!args)' \
+            '    return 1;' \
+            '' \
+            '  args[j++] = (char *)((real && *real) ? real : "gcc");' \
+            '  args[j++] = "-E";' \
+            '  args[j++] = "-U__GNUC__";' \
+            '  args[j++] = "-U__GNUC_MINOR__";' \
+            '  args[j++] = "-U__GNUC_PATCHLEVEL__";' \
+            '  args[j++] = "-U__clang__";' \
+            '  args[j++] = "-U__llvm__";' \
+            '  for (int i = 1; i < argc; i++)' \
+            '    {' \
+            '      if (strcmp(argv[i], "-std=c23") == 0)' \
+            '        args[j++] = "-std=c2x";' \
+            '      else' \
+            '        args[j++] = argv[i];' \
+            '    }' \
+            '  args[j] = NULL;' \
+            '' \
+            '  rc = _spawnvp(_P_WAIT, args[0], (const char * const *)args);' \
+            '  free(args);' \
+            '  return rc == -1 ? 1 : rc;' \
+            '}' \
+            > "$BUILD_DIR/sdcpp-host.c"
+          gcc -O2 -o "$BUILD_DIR/bin/sdcpp.exe" "$BUILD_DIR/sdcpp-host.c"
 
           make -j"$(nproc)"
           make install DESTDIR="$PACKAGE_DIR"
