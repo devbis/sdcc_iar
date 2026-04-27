@@ -4,6 +4,16 @@ import re
 
 
 CAMEL_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|[0-9]+")
+MODULE_PREFIX_HINTS = {
+    "APS": ("AIB", "APSF"),
+    "APSMEDE": ("APSDE", "APSME"),
+    "NLMEDE": ("NLDE", "NLME"),
+    "nwk": ("NWK", "Nwk", "nwk"),
+    "rtg": ("RTG",),
+    "ssp": ("SSP",),
+    "cGP_stub": ("GP", "gp"),
+    "dGP_stub": ("GP", "gp"),
+}
 
 
 def _split_parts(value: str) -> list[str]:
@@ -44,14 +54,22 @@ def _score_module(symbol: str, module: str) -> int:
         return 0
 
     score = 0
-    if symbol_key.startswith(module_key):
-        score += 8
-    if module_key in symbol_key:
-        score += 5
+    short_module = len(module_key) <= 3
+    if not short_module:
+        if symbol_key.startswith(module_key):
+            score += 8
+        if module_key in symbol_key:
+            score += 5
 
-    prefix_len = _common_prefix_len(symbol_key, module_key)
-    if prefix_len >= 3:
-        score += min(prefix_len, 6)
+    for prefix in MODULE_PREFIX_HINTS.get(module, ()):
+        if symbol_name.startswith(prefix):
+            score += 10
+            break
+
+    if not short_module:
+        prefix_len = _common_prefix_len(symbol_key, module_key)
+        if prefix_len >= 3:
+            score += min(prefix_len, 6)
 
     symbol_parts = set(_split_parts(symbol_name))
     module_parts = set(_split_parts(module))

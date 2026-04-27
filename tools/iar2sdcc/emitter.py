@@ -84,10 +84,12 @@ def _is_data_symbol(symbol: str, normalized_ir: dict[str, object]) -> bool:
         return True
     if "_PARM_" in symbol or symbol.startswith("__"):
         return True
-    if symbol.endswith(("TaskID", "Counter", "Rate", "Duration")):
+    if symbol.endswith(("TaskID", "Counter")):
         return True
-    if symbol.startswith(("_AIB_", "_NIB", "_p")):
+    if symbol.startswith(("_AIB_", "_NIB", "_p", "_saved")):
         return True
+    if symbol[1:2].isupper():
+        return False
     return False
 
 

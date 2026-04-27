@@ -8,6 +8,7 @@ import re
 BANKED_MARKERS = ("?BDISPATCH", "?BRET", "?BANKED_ENTER_XDATA", "?BANKED_LEAVE_XDATA")
 SYMBOL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MODULE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+MODULE_STRING_MIN_LEN = 3
 NOISE_SYMBOLS = {
     "CLib",
     "Status_t",
@@ -142,7 +143,7 @@ def extract_strings_with_offsets(data: bytes, min_len: int = 4) -> list[tuple[in
 
 
 def extract_module_spans(data: bytes) -> list[ModuleSpan]:
-    strings = extract_strings_with_offsets(data)
+    strings = extract_strings_with_offsets(data, min_len=MODULE_STRING_MIN_LEN)
     starts: list[tuple[str, int]] = []
     seen: set[tuple[str, int]] = set()
     for index in range(len(strings) - 3):
@@ -171,9 +172,10 @@ def extract_module_spans(data: bytes) -> list[ModuleSpan]:
 def scan_library(path: Path) -> ArchiveInventory:
     data = path.read_bytes()
     strings = extract_strings(data)
+    module_strings = extract_strings(data, min_len=MODULE_STRING_MIN_LEN)
     markers = [marker for marker in BANKED_MARKERS if marker in strings]
     symbols = extract_symbols(strings)
-    modules = extract_modules(strings)
+    modules = extract_modules(module_strings)
     return ArchiveInventory(
         library=str(path.resolve()),
         size=len(data),

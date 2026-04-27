@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from iar2sdcc.archive import scan_library
+
 
 WORKSPACE = Path(__file__).resolve().parents[4]
 TOOLS = WORKSPACE / "sdcc" / "tools"
@@ -25,6 +27,26 @@ class IarCliSmokeTest(unittest.TestCase):
         self.assertIn("scan", proc.stdout)
         self.assertIn("resolve-log", proc.stdout)
         self.assertIn("convert", proc.stdout)
+
+
+class ArchiveScanTest(unittest.TestCase):
+    def test_scan_library_detects_short_router_modules(self) -> None:
+        inventory = scan_library(
+            (
+                WORKSPACE
+                / "Z-Stack_3.0.2"
+                / "Projects"
+                / "zstack"
+                / "Libraries"
+                / "TI2530DB"
+                / "bin"
+                / "Router-Pro.lib"
+            )
+        )
+        self.assertIn("APS", inventory.modules)
+        self.assertIn("nwk", inventory.modules)
+        self.assertIn("rtg", inventory.modules)
+        self.assertIn("ssp", inventory.modules)
 
 
 class ConvertCliTest(unittest.TestCase):
@@ -80,6 +102,15 @@ class ConvertCliTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             payload = json.loads((Path(td) / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(payload["link_resolution"]["log"], str(log_path.resolve()))
+            self.assertEqual(
+                payload["unresolved_symbols"],
+                [
+                    "_APSME_GetRequest",
+                    "_HalAesInit",
+                    "_MAC_MlmeOrphanRsp",
+                ],
+            )
+            self.assertIn("manifest_required_symbols", payload)
             module_plan_file = Path(td) / "module-plan.json"
             self.assertTrue(module_plan_file.exists())
             plan_payload = json.loads(module_plan_file.read_text(encoding="utf-8"))

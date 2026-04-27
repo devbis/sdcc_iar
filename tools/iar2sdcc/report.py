@@ -15,6 +15,7 @@ def write_manifest(
     modules: list[ModuleRecord],
     emitted: list[str],
     unresolved: list[str],
+    manifest_required_symbols: list[str] | None = None,
     link_resolution: dict[str, object] | None = None,
 ) -> None:
     payload = {
@@ -24,6 +25,8 @@ def write_manifest(
         "emitted_artifacts": emitted,
         "unresolved_symbols": unresolved,
     }
+    if manifest_required_symbols is not None:
+        payload["manifest_required_symbols"] = manifest_required_symbols
     if link_resolution is not None:
         payload["link_resolution"] = link_resolution
     path.parent.mkdir(parents=True, exist_ok=True)

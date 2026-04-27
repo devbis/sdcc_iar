@@ -168,11 +168,13 @@ def convert_project(
 
     workspace = ensure_out_dir(out_dir)
     emitted = [emit_stub_library(workspace, module.name) for module in selected]
-    unresolved = sorted(str(symbol) for symbol in manifest.get("required_symbols", []))
+    manifest_required_symbols = sorted(str(symbol) for symbol in manifest.get("required_symbols", []))
+    unresolved = list(manifest_required_symbols)
     link_resolution = None
     link_resolution_summary = None
     if link_log_path is not None:
         link_resolution = resolve_log(link_log_path, [Path(library) for library in libraries])
+        unresolved = sorted(str(symbol) for symbol in link_resolution["undefined_symbols"])
         link_resolution["module_slices"] = export_module_slices(workspace, link_resolution["module_plan"])
         planned_symbols: set[str] = set()
         for library, plan_entries in link_resolution["module_plan"].items():
@@ -218,6 +220,7 @@ def convert_project(
         modules=selected,
         emitted=emitted,
         unresolved=unresolved,
+        manifest_required_symbols=manifest_required_symbols,
         link_resolution=link_resolution,
     )
     report_lines = [
