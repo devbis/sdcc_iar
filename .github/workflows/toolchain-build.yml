@@ -103,13 +103,18 @@ jobs:
           printf '%s\n' \
             '#!/usr/bin/env bash' \
             'set -euo pipefail' \
+            'force_c23=0' \
             'translated=()' \
             'for arg in "$@"; do' \
             '  if [[ "$arg" == "-std=c23" ]]; then' \
             '    arg="-std=c2x"' \
+            '    force_c23=1' \
             '  fi' \
             '  translated+=("$arg")' \
             'done' \
+            'if (( force_c23 )); then' \
+            '  translated+=("-Wno-builtin-macro-redefined" "-D__STDC_VERSION__=202311L")' \
+            'fi' \
             'exec "${SDCPP_REAL:-gcc}" -E -U__GNUC__ -U__GNUC_MINOR__ -U__GNUC_PATCHLEVEL__ -U__clang__ -U__llvm__ "${translated[@]}"' \
             > "$CPP_SHIM"
           chmod +x "$CPP_SHIM"
@@ -190,13 +195,18 @@ jobs:
           printf '%s\n' \
             '#!/usr/bin/env bash' \
             'set -euo pipefail' \
+            'force_c23=0' \
             'translated=()' \
             'for arg in "$@"; do' \
             '  if [[ "$arg" == "-std=c23" ]]; then' \
             '    arg="-std=c2x"' \
+            '    force_c23=1' \
             '  fi' \
             '  translated+=("$arg")' \
             'done' \
+            'if (( force_c23 )); then' \
+            '  translated+=("-Wno-builtin-macro-redefined" "-D__STDC_VERSION__=202311L")' \
+            'fi' \
             'exec "${SDCPP_REAL:-gcc}" -E -U__GNUC__ -U__GNUC_MINOR__ -U__GNUC_PATCHLEVEL__ -U__clang__ -U__llvm__ "${translated[@]}"' \
             > "$CPP_SHIM"
           chmod +x "$CPP_SHIM"
@@ -256,10 +266,11 @@ jobs:
             'int main(int argc, char **argv)' \
             '{' \
             '  const char *real = getenv("SDCPP_REAL");' \
-            '  int extra = 7;' \
+            '  int extra = 10;' \
             '  char **args = (char **)calloc((size_t)argc + extra, sizeof(char *));' \
             '  int j = 0;' \
             '  int rc;' \
+            '  int force_c23 = 0;' \
             '' \
             '  if (!args)' \
             '    return 1;' \
@@ -274,9 +285,17 @@ jobs:
             '  for (int i = 1; i < argc; i++)' \
             '    {' \
             '      if (strcmp(argv[i], "-std=c23") == 0)' \
-            '        args[j++] = "-std=c2x";' \
+            '        {' \
+            '          args[j++] = "-std=c2x";' \
+            '          force_c23 = 1;' \
+            '        }' \
             '      else' \
             '        args[j++] = argv[i];' \
+            '    }' \
+            '  if (force_c23)' \
+            '    {' \
+            '      args[j++] = "-Wno-builtin-macro-redefined";' \
+            '      args[j++] = "-D__STDC_VERSION__=202311L";' \
             '    }' \
             '  args[j] = NULL;' \
             '' \
