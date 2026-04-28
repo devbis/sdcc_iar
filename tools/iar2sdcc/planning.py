@@ -101,18 +101,56 @@ def candidate_modules_for_symbol(
     return [module for _, module in scored[:limit]]
 
 
+def rank_exact_candidate_modules(
+    symbol: str,
+    modules: list[str],
+) -> list[str]:
+    ranked = candidate_modules_for_symbol(symbol, modules, limit=len(modules) or 1)
+    if ranked:
+        return ranked
+    return sorted(dict.fromkeys(modules))
+
+
 def build_module_candidates(
     libraries: dict[str, list[str]],
     resolved_symbols: dict[str, list[str]],
+    exact_module_exports: dict[str, dict[str, list[str]]] | None = None,
+    existing_module_symbols: dict[str, dict[str, list[str]]] | None = None,
 ) -> dict[str, dict[str, list[str]]]:
     candidates: dict[str, dict[str, list[str]]] = {}
     for symbol, owners in resolved_symbols.items():
         symbol_candidates: dict[str, list[str]] = {}
         for owner in owners:
-            symbol_candidates[owner] = candidate_modules_for_symbol(
+            exact_candidates: list[str] = []
+            if exact_module_exports is not None:
+                owner_exports = exact_module_exports.get(owner, {})
+                exact_candidates = owner_exports.get(symbol, [])
+                if not exact_candidates:
+                    base_symbol = re.sub(r"_PARM_[0-9]+$", "", symbol)
+                    if base_symbol != symbol:
+                        exact_candidates = owner_exports.get(base_symbol, [])
+            if exact_candidates:
+                symbol_candidates[owner] = rank_exact_candidate_modules(symbol, exact_candidates)
+                continue
+            existing_candidates: list[str] = []
+            if existing_module_symbols is not None:
+                owner_symbols = existing_module_symbols.get(owner, {})
+                existing_candidates = owner_symbols.get(symbol, [])
+                if not existing_candidates:
+                    base_symbol = re.sub(r"_PARM_[0-9]+$", "", symbol)
+                    if base_symbol != symbol:
+                        existing_candidates = owner_symbols.get(base_symbol, [])
+            if existing_candidates:
+                symbol_candidates[owner] = rank_exact_candidate_modules(symbol, existing_candidates)
+                continue
+            owner_modules = libraries.get(owner, [])
+            module_candidates = candidate_modules_for_symbol(
                 symbol,
-                libraries.get(owner, []),
+                owner_modules,
             )
+            if not module_candidates and len(owner_modules) == 1:
+                module_candidates = [owner_modules[0]]
+            symbol_candidates[owner] = module_candidates
         candidates[symbol] = symbol_candidates
     return candidates
 

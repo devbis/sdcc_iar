@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from iar2sdcc.archive import scan_library
@@ -24,9 +25,11 @@ class IarCliSmokeTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertIn("usage:", proc.stdout.lower())
         self.assertIn("inspect-slice", proc.stdout)
+        self.assertIn("inspect-object", proc.stdout)
         self.assertIn("scan", proc.stdout)
         self.assertIn("resolve-log", proc.stdout)
         self.assertIn("convert", proc.stdout)
+        self.assertIn("convert-object", proc.stdout)
 
 
 class ArchiveScanTest(unittest.TestCase):
@@ -117,11 +120,17 @@ class ConvertCliTest(unittest.TestCase):
             module_slice_file = Path(td) / "module-slices" / "Security" / "hal_aes.bin"
             module_slice_summary = Path(td) / "module-slices" / "Security" / "hal_aes.json"
             module_slice_ir = Path(td) / "module-slices" / "Security" / "hal_aes.ir.json"
-            auto_stub_asm = Path(td) / "hal_aes.auto.asm"
+            converted_rel = Path(td) / "hal_aes.rel"
+            converted_metadata = Path(td) / "hal_aes.convert.json"
+            converted_asm = Path(td) / "hal_aes.converted.asm"
+            apsmede_metadata = Path(td) / "APSMEDE.convert.json"
             self.assertTrue(module_slice_file.exists())
             self.assertTrue(module_slice_summary.exists())
             self.assertTrue(module_slice_ir.exists())
-            self.assertTrue(auto_stub_asm.exists())
+            self.assertTrue(converted_rel.exists())
+            self.assertTrue(converted_metadata.exists())
+            self.assertTrue(converted_asm.exists())
+            self.assertTrue(apsmede_metadata.exists())
             self.assertEqual(
                 plan_payload["project"],
                 "samplelight-cc2530db-coordinator",
@@ -144,8 +153,29 @@ class ConvertCliTest(unittest.TestCase):
                 ],
             )
             self.assertTrue(
-                any(path.endswith(".auto.rel") for path in payload["emitted_artifacts"])
+                any(path.endswith("hal_aes.rel") for path in payload["emitted_artifacts"])
             )
+            hal_aes_slice = next(
+                entry
+                for entry in payload["link_resolution"]["module_slices"][
+                    str(
+                        (
+                            WORKSPACE
+                            / "Z-Stack_3.0.2"
+                            / "Projects"
+                            / "zstack"
+                            / "Libraries"
+                            / "TI2530DB"
+                            / "bin"
+                            / "Security.lib"
+                        ).resolve()
+                    )
+                ]
+                if entry["module"] == "hal_aes"
+            )
+            self.assertEqual(hal_aes_slice["conversion_mode"], "object")
+            self.assertTrue(hal_aes_slice["rel_path"].endswith("hal_aes.rel"))
+            self.assertTrue(hal_aes_slice["metadata_path"].endswith("hal_aes.convert.json"))
             self.assertIn(
                 "APSMEDE",
                 payload["link_resolution"]["module_candidates"]["_APSME_GetRequest"][
@@ -228,9 +258,19 @@ class ConvertCliTest(unittest.TestCase):
             self.assertIn("_HalAesInit", summary_payload["symbols"])
             self.assertEqual(ir_payload["module"], "hal_aes")
             self.assertIn("_HalAesInit", ir_payload["public_callables"])
-            auto_stub_text = auto_stub_asm.read_text(encoding="utf-8")
-            self.assertIn(".globl _HalAesInit", auto_stub_text)
-            self.assertNotIn(".globl __HalAesInit", auto_stub_text)
+            self.assertEqual(
+                json.loads(apsmede_metadata.read_text(encoding="utf-8"))["module"],
+                "APSMEDE",
+            )
+            apsmede_payload = json.loads(apsmede_metadata.read_text(encoding="utf-8"))
+            self.assertIn("_APSME_GetRequest", apsmede_payload["exports"])
+            self.assertEqual(apsmede_payload["emitted_exports"], ["_APSME_GetRequest"])
+            apsmede_asm_text = (Path(td) / "APSMEDE.converted.asm").read_text(encoding="utf-8")
+            self.assertIn(".globl _APSME_GetRequest", apsmede_asm_text)
+            self.assertNotIn(".globl _APSME_HoldDataRequests", apsmede_asm_text)
+            converted_asm_text = converted_asm.read_text(encoding="utf-8")
+            self.assertIn(".globl _HalAesInit", converted_asm_text)
+            self.assertNotIn(".globl __HalAesInit", converted_asm_text)
             self.assertTrue(
                 any(
                     entry["module"] == "hal_aes"
@@ -243,6 +283,268 @@ class ConvertCliTest(unittest.TestCase):
             self.assertIn("link_symbols_with_module_candidates=3", report)
             self.assertIn("link_planned_modules=3", report)
             self.assertIn("link_exported_module_slices=3", report)
+
+    def test_convert_preserves_named_iar_layout_areas_for_banked_module(self) -> None:
+        log_text = """\
+?ASlink-Warning-Undefined Global _MAC_Init referenced by module test
+"""
+        with tempfile.TemporaryDirectory() as td:
+            log_path = Path(td) / "samplelight.link.log"
+            log_path.write_text(log_text, encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "iar2sdcc.cli",
+                    "convert",
+                    "--manifest",
+                    str(MANIFEST),
+                    "--out-dir",
+                    td,
+                    "--link-log",
+                    str(log_path),
+                ],
+                cwd=TOOLS,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+
+            metadata = json.loads((Path(td) / "mac_beacon.convert.json").read_text(encoding="utf-8"))
+            asm_text = (Path(td) / "mac_beacon.converted.asm").read_text(encoding="utf-8")
+
+            self.assertEqual(
+                metadata["area_plan"]["section_area_map"]["BANK_RELAYS"]["role"],
+                "bank_relays",
+            )
+            self.assertEqual(
+                metadata["area_plan"]["section_area_map"]["CODE_C"]["role"],
+                "code_const",
+            )
+            self.assertEqual(
+                metadata["area_plan"]["section_area_map"]["XDATA_ROM_C"]["role"],
+                "xdata_rom_alias",
+            )
+            self.assertIn("BANK_RELAYS", metadata["area_plan"]["root_code_areas"])
+            self.assertIn(".area BANK_RELAYS", asm_text)
+            self.assertIn(".area CODE_C", asm_text)
+            self.assertIn(".area XDATA_ROM_C", asm_text)
+
+    def test_convert_reuses_existing_metadata_for_second_pass_symbol_routing(self) -> None:
+        router_lib = (
+            WORKSPACE
+            / "Z-Stack_3.0.2"
+            / "Projects"
+            / "zstack"
+            / "Libraries"
+            / "TI2530DB"
+            / "bin"
+            / "Router-Pro.lib"
+        ).resolve()
+        log_text = """\
+?ASlink-Warning-Undefined Global _AIB_MaxBindingTime referenced by module ZDApp
+"""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            existing_metadata = {
+                "module": "APS",
+                "source_library": str(router_lib),
+                "source_path": str(out_dir / "module-slices" / "Router-Pro" / "APS.bin"),
+                "exports": [],
+                "imports": ["_AIB_MaxBindingTime"],
+                "locals": [],
+                "forced_exports": [],
+            }
+            (out_dir / "APS.convert.json").write_text(
+                json.dumps(existing_metadata),
+                encoding="utf-8",
+            )
+            log_path = out_dir / "samplelight.link.log"
+            log_path.write_text(log_text, encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "iar2sdcc.cli",
+                    "convert",
+                    "--manifest",
+                    str(MANIFEST),
+                    "--out-dir",
+                    td,
+                    "--link-log",
+                    str(log_path),
+                ],
+                cwd=TOOLS,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            payload = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                payload["link_resolution"]["module_candidates"]["_AIB_MaxBindingTime"][str(router_lib)],
+                ["APS"],
+            )
+            self.assertEqual(
+                payload["link_resolution"]["module_plan"][str(router_lib)][0]["module"],
+                "APS",
+            )
+
+    def test_convert_preserves_previous_emitted_exports_for_same_module(self) -> None:
+        router_lib = (
+            WORKSPACE
+            / "Z-Stack_3.0.2"
+            / "Projects"
+            / "zstack"
+            / "Libraries"
+            / "TI2530DB"
+            / "bin"
+            / "Router-Pro.lib"
+        ).resolve()
+        log_text = """\
+?ASlink-Warning-Undefined Global _AIB_MaxBindingTime referenced by module ZDApp
+"""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            existing_metadata = {
+                "module": "APS",
+                "source_library": str(router_lib),
+                "source_path": str(out_dir / "module-slices" / "Router-Pro" / "APS.bin"),
+                "exports": ["_APSME_GetRequest"],
+                "emitted_exports": ["_APSME_GetRequest"],
+                "imports": ["_AIB_MaxBindingTime"],
+                "locals": [],
+                "forced_exports": [],
+            }
+            (out_dir / "APS.convert.json").write_text(
+                json.dumps(existing_metadata),
+                encoding="utf-8",
+            )
+            log_path = out_dir / "samplelight.link.log"
+            log_path.write_text(log_text, encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "iar2sdcc.cli",
+                    "convert",
+                    "--manifest",
+                    str(MANIFEST),
+                    "--out-dir",
+                    td,
+                    "--link-log",
+                    str(log_path),
+                ],
+                cwd=TOOLS,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            payload = json.loads((out_dir / "APS.convert.json").read_text(encoding="utf-8"))
+            self.assertIn("_APSME_GetRequest", payload["emitted_exports"])
+            self.assertIn("_AIB_MaxBindingTime", payload["emitted_exports"])
+
+    def test_convert_preserves_previous_emitted_artifacts_across_passes(self) -> None:
+        log_text = """\
+?ASlink-Warning-Undefined Global _HalAesInit referenced by module ZDSecMgr
+"""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            preserved_rel = out_dir / "previous-pass.rel"
+            preserved_rel.write_text("XH3\n", encoding="utf-8")
+            existing_manifest = {
+                "project": "samplelight-cc2530db-coordinator",
+                "libraries": [],
+                "modules": [],
+                "emitted_artifacts": [str(preserved_rel)],
+                "unresolved_symbols": [],
+            }
+            (out_dir / "manifest.json").write_text(
+                json.dumps(existing_manifest),
+                encoding="utf-8",
+            )
+            log_path = out_dir / "samplelight.link.log"
+            log_path.write_text(log_text, encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "iar2sdcc.cli",
+                    "convert",
+                    "--manifest",
+                    str(MANIFEST),
+                    "--out-dir",
+                    td,
+                    "--link-log",
+                    str(log_path),
+                ],
+                cwd=TOOLS,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            payload = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertIn(str(preserved_rel), payload["emitted_artifacts"])
+            self.assertTrue(any(path.endswith("hal_aes.rel") for path in payload["emitted_artifacts"]))
+            rerun = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "iar2sdcc.cli",
+                    "convert",
+                    "--manifest",
+                    str(MANIFEST),
+                    "--out-dir",
+                    td,
+                    "--link-log",
+                    str(log_path),
+                ],
+                cwd=TOOLS,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(rerun.returncode, 0, msg=rerun.stderr)
+            rerun_payload = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+            counts = Counter(rerun_payload["emitted_artifacts"])
+            self.assertEqual(counts[str(preserved_rel)], 1)
+
+    def test_convert_preserves_remaining_fallback_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            remaining_rel = out_dir / "remaining.auto.rel"
+            remaining_rel.write_text("XH3\n", encoding="utf-8")
+            existing_manifest = {
+                "project": "samplelight-cc2530db-coordinator",
+                "libraries": [],
+                "modules": [],
+                "emitted_artifacts": [str(remaining_rel)],
+                "unresolved_symbols": [],
+            }
+            (out_dir / "manifest.json").write_text(
+                json.dumps(existing_manifest),
+                encoding="utf-8",
+            )
+            log_path = out_dir / "samplelight.link.log"
+            log_path.write_text("", encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "iar2sdcc.cli",
+                    "convert",
+                    "--manifest",
+                    str(MANIFEST),
+                    "--out-dir",
+                    td,
+                    "--link-log",
+                    str(log_path),
+                ],
+                cwd=TOOLS,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            payload = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertIn(str(remaining_rel), payload["emitted_artifacts"])
 
     def test_inspect_slice_reads_exported_module_summary(self) -> None:
         log_text = """\

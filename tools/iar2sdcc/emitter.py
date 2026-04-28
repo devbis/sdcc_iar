@@ -107,13 +107,18 @@ def _emit_exact_stub_module(
         lines.append(f"\t.globl {symbol}")
 
     lines.append("\t.area XSEG    (XDATA)")
-    for symbol in data_symbols:
-        lines.append(f"{symbol}::")
+    if data_symbols:
+        for symbol in data_symbols:
+            lines.append(f"{symbol}::")
         lines.append("\t.ds 1")
 
     lines.append("\t.area CSEG    (CODE)")
-    for symbol in functions:
-        lines.append(f"{symbol}::")
+    if functions:
+        for symbol in functions:
+            lines.append(f"{symbol}::")
+        lines.append("\tret")
+    elif not data_symbols:
+        lines.append(f"__iar2sdcc_stub_{_identifier(module_name)}::")
         lines.append("\tret")
 
     source.write_text("\n".join(lines) + "\n", encoding="utf-8")

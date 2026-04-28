@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from .archive import normalize_symbol
+from .heuristics import is_noise_symbol
 
 
 UNDEFINED_GLOBAL_RE = re.compile(
@@ -18,6 +19,8 @@ def parse_undefined_globals(text: str) -> dict[str, list[str]]:
         if match is None:
             continue
         symbol = normalize_symbol(match.group("symbol"))
+        if is_noise_symbol(symbol):
+            continue
         module = match.group("module")
         modules = references.setdefault(symbol, [])
         if module not in modules:
