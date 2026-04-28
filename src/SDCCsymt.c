@@ -26,6 +26,9 @@
 #include "dbuf_string.h"
 
 #include "SDCCsymt.h"
+#if !OPT_DISABLE_MCS51
+#include "mcs51/main.h"
+#endif
 
 value *aggregateToPointer (value * val);
 void printTypeChainRaw (sym_link * start, FILE * of);
@@ -1515,8 +1518,25 @@ addSymChain (symbol **symHead)
   int elemsFromIval = 0;
 
   for (sym = *symHead; sym; sym = sym->next)
+    changePointer (sym->type);
+
+#if !OPT_DISABLE_MCS51
+  if (TARGET_IS_MCS51)
+    mcs51IarApplyLocationToDecl (*symHead);
+#endif
+
+  for (sym = *symHead; sym; sym = sym->next)
     {
-      changePointer (sym->type);
+      if (IS_FUNC (sym->type) && IS_SPEC (sym->etype) && FUNC_NONBANKED (sym->etype))
+        {
+          FUNC_NONBANKED (sym->etype) = 0;
+          FUNC_NONBANKED (sym->type) = 1;
+#if !OPT_DISABLE_MCS51
+          if (TARGET_IS_MCS51 && mcs51IarAbi && !sym->codeseg[0])
+            strncpyz (sym->codeseg, "NEAR_CODE (CODE)", sizeof (sym->codeseg));
+#endif
+        }
+
       checkTypeSanity (sym->etype, sym->name);
 #if 0
       printf("addSymChain for %p %s level %ld extern %d\n", sym, sym->name, sym->level, IS_EXTERN (sym->etype));
@@ -1712,6 +1732,10 @@ addSymChain (symbol **symHead)
           if (csym->ival && !sym->ival)
             sym->ival = csym->ival;
           sym->generated |= csym->generated;
+          if (csym->codeseg[0] && !sym->codeseg[0])
+            strncpyz (sym->codeseg, csym->codeseg, sizeof (sym->codeseg));
+          else if (sym->codeseg[0] && !csym->codeseg[0])
+            strncpyz (csym->codeseg, sym->codeseg, sizeof (csym->codeseg));
 
           if (IS_EXTERN (sym->etype) && IFFUNC_ISINLINE (csym->type))
             {
@@ -3704,6 +3728,15 @@ checkFunction (symbol * sym, symbol * csym)
       SPEC_INLINE (sym->etype) = 0;
       FUNC_ISINLINE (sym->type) = 1;
     }
+  if (FUNC_NONBANKED (sym->etype))
+    {
+      FUNC_NONBANKED (sym->etype) = 0;
+      FUNC_NONBANKED (sym->type) = 1;
+#if !OPT_DISABLE_MCS51
+      if (TARGET_IS_MCS51 && mcs51IarAbi && !sym->codeseg[0])
+        strncpyz (sym->codeseg, "NEAR_CODE (CODE)", sizeof (sym->codeseg));
+#endif
+    }
   if (IS_NORETURN (sym->etype))
     {
       SPEC_NORETURN (sym->etype) = 0;
@@ -3899,6 +3932,10 @@ checkFunction (symbol * sym, symbol * csym)
 
   /* replace with this definition */
   sym->cdef = csym->cdef;
+  if (csym->codeseg[0] && !sym->codeseg[0])
+    strncpyz (sym->codeseg, csym->codeseg, sizeof (sym->codeseg));
+  else if (sym->codeseg[0] && !csym->codeseg[0])
+    strncpyz (csym->codeseg, sym->codeseg, sizeof (csym->codeseg));
   deleteSym (SymbolTab, csym, csym->name);
   deleteFromSeg (csym);
   addSym (SymbolTab, sym, sym->name, sym->level, sym->block, true);
@@ -5648,8 +5685,17 @@ prepareDeclarationSymbol (attribute *attr, sym_link *declSpecs, symbol *initDecl
       /* do the pointer stuff */
       pointerTypes (sym->type, lnk);
       addDecl (sym, 0, lnk);
+
+      if (IS_SPEC (declSpecs) && FUNC_NONBANKED (declSpecs))
+        {
+          for (l1 = sym->type; l1 != NULL; l1 = l1->next)
+            if (IS_FUNC (l1))
+              {
+                FUNC_NONBANKED (l1) = 1;
+                break;
+              }
+        }
     }
 
   return sym1;
 }
-

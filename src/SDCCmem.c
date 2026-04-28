@@ -363,7 +363,7 @@ allocIntoSeg (symbol *sym)
 
   const symbol *symbolspace = getAddrspace (sym->type);
 
-  if (symbolspace)
+  if (symbolspace && !IS_FUNC (sym->type))
     {
       namedspacemap *nm;
       for (nm = namedspacemaps; nm; nm = nm->next)

@@ -218,6 +218,7 @@ static void checkCurrFile (const char *s);
 "__critical"            { count (); TKEYWORD (CRITICAL); }
 "__fixed16x16"          { count (); TKEYWORD (FIXED16X16); }
 "__interrupt"           { count (); TKEYWORD (INTERRUPT); }
+"__near_func"           { count (); TKEYWORD (NEAR_FUNC); }
 "__nonbanked"           { count (); TKEYWORD (NONBANKED); }
 "__banked"              { count (); TKEYWORD (BANKED); }
 "__trap"                { count (); TKEYWORD (TRAP); }
@@ -1384,4 +1385,3 @@ yyerror (char *s)
 
   return 0;
 }
-

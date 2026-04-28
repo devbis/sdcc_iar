@@ -30,6 +30,9 @@
 #include "dbuf_string.h"
 #include "SDCCbtree.h"
 #include "SDCCset.h"
+#if !OPT_DISABLE_MCS51
+#include "mcs51/main.h"
+#endif
 
 int currLineno = 0;
 set *astList = NULL;
@@ -7696,6 +7699,11 @@ createFunctionDecl (symbol *name)
      Fixed bug #2556. */
   changePointer (name->type);
 
+#if !OPT_DISABLE_MCS51
+  if (TARGET_IS_MCS51)
+    mcs51IarApplyLocationToDecl (name);
+#endif
+
   /* if check function return 0 then some problem */
   if (checkFunction (name, NULL) == 0)
     return NULL;
@@ -7710,6 +7718,8 @@ createFunctionDecl (symbol *name)
   /* check if the function name already in the symbol table */
   if ((csym = findSym (SymbolTab, NULL, name->name)))
     {
+      if (name->codeseg[0] && !csym->codeseg[0])
+        strncpyz (csym->codeseg, name->codeseg, sizeof (csym->codeseg));
       name = csym;
 
       /* special case for compiler defined functions
@@ -8804,4 +8814,3 @@ offsetofOp (sym_link *type, ast *snd)
 
   return offsetofOp_rec (type, snd, &result_type);
 }
-

@@ -4490,6 +4490,7 @@ genFunction (iCode * ic)
   emitcode (";", "-----------------------------------------");
   emitcode (";", " function %s", sym->name);
   emitcode (";", "-----------------------------------------");
+  emitcode ("", ".area %s", sym->codeseg[0] ? sym->codeseg : options.code_seg);
 
   emitcode ("", "%s:", sym->rname);
   genLine.lineCurr->isLabel = 1;

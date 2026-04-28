@@ -407,6 +407,7 @@ typedef struct symbol
   struct bitVect *clashes;          /* overlaps with what other symbols */
   struct ast *funcTree;             /* function body ast if inlined */
   struct symbol *addressmod[2];     /* access functions for named address spaces */
+  char codeseg[SDCC_NAME_MAX + 1];  /* optional per-function code segment */
 
   bool for_newralloc;
 }
@@ -789,4 +790,3 @@ extern const char *nounName (sym_link *);     /* noun strings */
 extern void printFromToType (sym_link *, sym_link *);
 
 #endif
-

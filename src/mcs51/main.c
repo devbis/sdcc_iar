@@ -50,7 +50,11 @@ enum
 {
   MCS51_P_LANGUAGE = 1,
   MCS51_P_OPTIMIZE,
+  MCS51_P_LOCATION,
+  MCS51_P_REQUIRED,
 };
+
+static char *mcs51IarPendingLocation = NULL;
 
 static const char *
 _mcs51_skip_spaces (const char *s)
@@ -100,6 +104,129 @@ _mcs51_match_pragma_value (const char *s, const char *name, const char * const *
   return false;
 }
 
+static bool
+_mcs51_copy_pragma_rhs (const char *s, const char *name, char **value)
+{
+  size_t name_len = strlen (name);
+  const char *start;
+  const char *end;
+  struct dbuf_s dbuf;
+
+  *value = NULL;
+  s = _mcs51_skip_spaces (s);
+  if (strncmp (s, name, name_len) || !(isspace ((unsigned char)s[name_len]) || s[name_len] == '=' || s[name_len] == '\0' || s[name_len] == '\n'))
+    return false;
+
+  s += name_len;
+  s = _mcs51_skip_spaces (s);
+  if (*s != '=')
+    return false;
+
+  s++;
+  s = _mcs51_skip_spaces (s);
+  if (*s == '\0' || *s == '\n')
+    return false;
+
+  dbuf_init (&dbuf, 32);
+
+  if (*s == '"')
+    {
+      start = ++s;
+      while (*s && *s != '\n' && *s != '"')
+        ++s;
+      if (*s != '"' || !_mcs51_is_eol (s + 1))
+        {
+          dbuf_destroy (&dbuf);
+          return false;
+        }
+      dbuf_append (&dbuf, start, s - start);
+    }
+  else
+    {
+      start = s;
+      end = s;
+      while (*end && *end != '\n' && !isspace ((unsigned char)*end))
+        ++end;
+      if (!_mcs51_is_eol (end))
+        {
+          dbuf_destroy (&dbuf);
+          return false;
+        }
+      dbuf_append (&dbuf, start, end - start);
+    }
+
+  *value = dbuf_detach_c_str (&dbuf);
+  return true;
+}
+
+static symbol *
+_mcs51_get_addrspace (const char *segment_name, bool code_space)
+{
+  struct dbuf_s dbuf;
+  symbol *addrspace;
+
+  dbuf_init (&dbuf, 32);
+  dbuf_printf (&dbuf, "%s (%s)", segment_name, code_space ? "CODE" : "DATA");
+  addrspace = findSym (AddrspaceTab, NULL, dbuf_c_str (&dbuf));
+  if (!addrspace)
+    {
+      sym_link *type;
+
+      addrspace = newSymbol (dbuf_c_str (&dbuf), 0);
+      type = newLink (SPECIFIER);
+      if (code_space)
+        SPEC_CONST (type) = 1;
+      addrspace->type = addrspace->etype = type;
+      addSym (AddrspaceTab, addrspace, addrspace->name, addrspace->level, addrspace->block, false);
+      addrspace = findSym (AddrspaceTab, NULL, dbuf_c_str (&dbuf));
+    }
+  dbuf_destroy (&dbuf);
+
+  return addrspace;
+}
+
+static bool
+_mcs51_apply_pending_location_to_symbol (symbol *sym)
+{
+  symbol *addrspace;
+  struct dbuf_s dbuf;
+
+  if (!mcs51IarAbi || !mcs51IarPendingLocation || !sym || sym->level || sym->_isparm || IS_TYPEDEF (sym->etype))
+    return false;
+
+  if (IS_FUNC (sym->type))
+    {
+      dbuf_init (&dbuf, 32);
+      dbuf_printf (&dbuf, "%s (CODE)", mcs51IarPendingLocation);
+      strncpyz (sym->codeseg, dbuf_c_str (&dbuf), sizeof (sym->codeseg));
+      dbuf_destroy (&dbuf);
+    }
+  else
+    {
+      addrspace = _mcs51_get_addrspace (mcs51IarPendingLocation, true);
+      if (!addrspace)
+        return false;
+      SPEC_ADDRSPACE (sym->etype) = addrspace;
+    }
+
+  return true;
+}
+
+void
+mcs51IarApplyLocationToDecl (symbol *symHead)
+{
+  bool applied = false;
+
+  for (; symHead; symHead = symHead->next)
+    applied |= _mcs51_apply_pending_location_to_symbol (symHead);
+
+  if (applied)
+    {
+      Safe_free (mcs51IarPendingLocation);
+      mcs51IarPendingLocation = NULL;
+    }
+}
+
 static OPTION _mcs51_options[] =
   {
     { 0, OPTION_SMALL_MODEL, NULL, "internal data space is used (default)"},
@@ -118,6 +245,7 @@ _mcs51_do_pragma (int id, const char *name, const char *cp)
 {
   static const char * const language_values[] = { "extended", "default", NULL };
   static const char * const optimize_values[] = { "none", "low", "medium", "high", "size", "speed", NULL };
+  char *value;
 
   switch (id)
     {
@@ -133,6 +261,25 @@ _mcs51_do_pragma (int id, const char *name, const char *cp)
       werror (W_BAD_PRAGMA_ARGUMENTS, name);
       return 1;
 
+    case MCS51_P_LOCATION:
+      if (_mcs51_copy_pragma_rhs (cp, name, &value))
+        {
+          Safe_free (mcs51IarPendingLocation);
+          mcs51IarPendingLocation = value;
+          return 1;
+        }
+      werror (W_BAD_PRAGMA_ARGUMENTS, name);
+      return 1;
+
+    case MCS51_P_REQUIRED:
+      if (_mcs51_copy_pragma_rhs (cp, name, &value))
+        {
+          Safe_free (value);
+          return 1;
+        }
+      werror (W_BAD_PRAGMA_ARGUMENTS, name);
+      return 1;
+
     default:
       return 0;
     }
@@ -142,6 +289,8 @@ static struct pragma_s _mcs51_pragma_tbl[] =
 {
   { "language", MCS51_P_LANGUAGE, 0, _mcs51_do_pragma },
   { "optimize", MCS51_P_OPTIMIZE, 0, _mcs51_do_pragma },
+  { "location", MCS51_P_LOCATION, 0, _mcs51_do_pragma },
+  { "required", MCS51_P_REQUIRED, 0, _mcs51_do_pragma },
   { NULL, 0, 0, NULL }
 };
 
@@ -178,6 +327,7 @@ static char *_mcs51_keywords[] =
   "idata",
   "iar",
   "interrupt",
+  "near_func",
   "naked",
   "near",
   "nonbanked",

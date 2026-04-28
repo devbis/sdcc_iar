@@ -24,6 +24,7 @@
 #define MAIN_INCLUDE
 
 #include "SDCCgen.h"
+#include "SDCCsymt.h"
 
 typedef struct asmLineNode
   {
@@ -41,5 +42,7 @@ asmLineNode;
 bool x_parseOptions (char **argv, int *pargc);
 void x_setDefaultOptions (void);
 void x_finaliseOptions (void);
+extern int mcs51IarAbi;
+void mcs51IarApplyLocationToDecl (symbol *symHead);
 
 #endif
