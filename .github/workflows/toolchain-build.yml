@@ -106,6 +106,9 @@ jobs:
             'force_c23=0' \
             'translated=()' \
             'for arg in "$@"; do' \
+            '  if [[ "$arg" == --obj-ext=* ]]; then' \
+            '    continue' \
+            '  fi' \
             '  if [[ "$arg" == "-std=c23" ]]; then' \
             '    arg="-std=c2x"' \
             '    force_c23=1' \
