@@ -2334,7 +2334,13 @@ preProcess (char **envp)
         }
 
       if (TARGET_IS_MCS51 && mcs51IarAbi)
-        addSet (&preArgvSet, Safe_strdup ("-D__SDCC_mcs51_ABI_IAR"));
+        {
+          addSet (&preArgvSet, Safe_strdup ("-D__SDCC_mcs51_ABI_IAR"));
+          addSet (&preArgvSet, Safe_strdup ("-D__root="));
+          addSet (&preArgvSet, Safe_strdup ("-D__near_func="));
+          addSet (&preArgvSet, Safe_strdup ("-D__no_init="));
+          addSet (&preArgvSet, Safe_strdup ("-D__intrinsic="));
+        }
 
       /* set macro for optimization level */
       if (optimize.codeSpeed)

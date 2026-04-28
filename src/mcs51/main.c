@@ -46,6 +46,60 @@ static char _defaultRules[] =
 
 int mcs51IarAbi = 0;
 
+enum
+{
+  MCS51_P_LANGUAGE = 1,
+  MCS51_P_OPTIMIZE,
+};
+
+static const char *
+_mcs51_skip_spaces (const char *s)
+{
+  while (*s && isspace ((unsigned char)*s))
+    ++s;
+
+  return s;
+}
+
+static bool
+_mcs51_is_eol (const char *s)
+{
+  s = _mcs51_skip_spaces (s);
+  return (*s == '\0' || *s == '\n');
+}
+
+static bool
+_mcs51_match_pragma_value (const char *s, const char *name, const char * const *values)
+{
+  size_t name_len = strlen (name);
+  const char *value;
+  int i;
+
+  s = _mcs51_skip_spaces (s);
+  if (strncmp (s, name, name_len) || !(isspace ((unsigned char)s[name_len]) || s[name_len] == '=' || s[name_len] == '\0' || s[name_len] == '\n'))
+    return false;
+
+  s += name_len;
+  s = _mcs51_skip_spaces (s);
+  if (*s != '=')
+    return false;
+
+  s++;
+  s = _mcs51_skip_spaces (s);
+  value = s;
+  while (*s && *s != '\n' && !isspace ((unsigned char)*s))
+    ++s;
+
+  for (i = 0; values[i]; i++)
+    {
+      size_t value_len = strlen (values[i]);
+      if ((size_t)(s - value) == value_len && !strncmp (value, values[i], value_len) && _mcs51_is_eol (s))
+        return true;
+    }
+
+  return false;
+}
+
 static OPTION _mcs51_options[] =
   {
     { 0, OPTION_SMALL_MODEL, NULL, "internal data space is used (default)"},
@@ -58,6 +112,57 @@ static OPTION _mcs51_options[] =
     { 0, "--no-ret-without-call", &options.no_ret_without_call, "Do not use ret independent of acall/lcall" },
     { 0, NULL }
   };
+
+static int
+_mcs51_do_pragma (int id, const char *name, const char *cp)
+{
+  static const char * const language_values[] = { "extended", "default", NULL };
+  static const char * const optimize_values[] = { "none", "low", "medium", "high", "size", "speed", NULL };
+
+  switch (id)
+    {
+    case MCS51_P_LANGUAGE:
+      if (_mcs51_match_pragma_value (cp, name, language_values))
+        return 1;
+      werror (W_BAD_PRAGMA_ARGUMENTS, name);
+      return 1;
+
+    case MCS51_P_OPTIMIZE:
+      if (_mcs51_match_pragma_value (cp, name, optimize_values))
+        return 1;
+      werror (W_BAD_PRAGMA_ARGUMENTS, name);
+      return 1;
+
+    default:
+      return 0;
+    }
+}
+
+static struct pragma_s _mcs51_pragma_tbl[] =
+{
+  { "language", MCS51_P_LANGUAGE, 0, _mcs51_do_pragma },
+  { "optimize", MCS51_P_OPTIMIZE, 0, _mcs51_do_pragma },
+  { NULL, 0, 0, NULL }
+};
+
+static int
+_mcs51_process_pragma (const char *s)
+{
+  size_t i;
+  const char *end;
+
+  s = _mcs51_skip_spaces (s);
+  end = s;
+  while (*end && *end != '\n' && !isspace ((unsigned char)*end) && *end != '=')
+    ++end;
+
+  for (i = 0; _mcs51_pragma_tbl[i].name; i++)
+    if (strlen (_mcs51_pragma_tbl[i].name) == (size_t)(end - s) &&
+        !strncmp (s, _mcs51_pragma_tbl[i].name, end - s))
+      return (*_mcs51_pragma_tbl[i].func) (_mcs51_pragma_tbl[i].id, _mcs51_pragma_tbl[i].name, s);
+
+  return 0;
+}
 
 /* list of key words used by msc51 */
 static char *_mcs51_keywords[] =
@@ -1103,7 +1208,7 @@ PORT mcs51_port =
   _mcs51_genInitStartup,
   _mcs51_reset_regparm,
   _mcs51_regparm,
-  NULL,                         /* process_pragma */
+  _mcs51_process_pragma,        /* process_pragma */
   NULL,                         /* getMangledFunctionName */
   _hasNativeMulFor,             /* hasNativeMulFor */
   hasExtBitOp,                  /* hasExtBitOp */
