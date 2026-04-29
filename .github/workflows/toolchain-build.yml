@@ -342,17 +342,14 @@ jobs:
           merge-multiple: true
 
       - name: Publish GitHub prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: toolchain-build-${{ github.run_id }}
-          RELEASE_TITLE: Toolchain build ${{ github.run_number }}
-        run: |
-          set -euxo pipefail
-          ls -lh release-artifacts
-          gh release create "$RELEASE_TAG" \
-            release-artifacts/* \
-            --target "${GITHUB_SHA}" \
-            --title "$RELEASE_TITLE" \
-            --notes "Automated SDCC toolchain build for ${GITHUB_SHA}." \
-            --prerelease
-        shell: bash
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: toolchain-build-${{ github.run_id }}
+          name: Toolchain build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          body: Automated SDCC toolchain build for ${{ github.sha }}.
+          prerelease: true
+          files: |
+            release-artifacts/sdcc-linux-amd64.tar.xz
+            release-artifacts/sdcc-macos-arm64.tar.xz
+            release-artifacts/sdcc-windows-amd64.tar.xz
