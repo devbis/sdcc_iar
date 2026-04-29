@@ -325,3 +325,34 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: ${{ github.workspace }}/${{ matrix.archive_name }}
           if-no-files-found: error
+
+  prerelease:
+    name: Publish prerelease
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged toolchains
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sdcc-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: toolchain-build-${{ github.run_id }}
+          RELEASE_TITLE: Toolchain build ${{ github.run_number }}
+        run: |
+          set -euxo pipefail
+          ls -lh release-artifacts
+          gh release create "$RELEASE_TAG" \
+            release-artifacts/* \
+            --target "${GITHUB_SHA}" \
+            --title "$RELEASE_TITLE" \
+            --notes "Automated SDCC toolchain build for ${GITHUB_SHA}." \
+            --prerelease
+        shell: bash
